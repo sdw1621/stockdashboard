@@ -1,0 +1,2031 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StockVision — 실시간 주식 대시보드</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+  <style>
+    /* ── Reset & Variables ─────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0b0e1a;
+      --surface:   #111827;
+      --surface2:  #1a2235;
+      --border:    #1f2d45;
+      --accent:    #3b82f6;
+      --accent2:   #8b5cf6;
+      --up:        #22c55e;
+      --down:      #ef4444;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --card-glow: rgba(59,130,246,.12);
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Starfield BG ──────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 10%, rgba(59,130,246,.07) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(139,92,246,.07) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Header ────────────────────────────────────────── */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      background: rgba(11,14,26,.85);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.15rem;
+      box-shadow: 0 0 12px rgba(59,130,246,.4);
+      flex-shrink: 0;
+      transition: box-shadow .3s, transform .2s;
+    }
+    .logo:hover .logo-icon {
+      box-shadow: 0 0 20px rgba(59,130,246,.65);
+      transform: scale(1.06);
+    }
+    .logo-text {
+      font-size: 1.05rem; font-weight: 700;
+      background: linear-gradient(90deg, #93c5fd, #c4b5fd);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      letter-spacing: -.01em;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .market-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: .8rem;
+      color: var(--muted);
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--up);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: .5; transform: scale(1.2); }
+    }
+
+    /* ── 장 상태 배지 ───────────────────────────────────── */
+    .market-badges {
+      display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+    }
+    .mkt-badge {
+      font-size: .65rem; font-weight: 700;
+      padding: 2px 7px; border-radius: 100px;
+      letter-spacing: .03em;
+    }
+    .mkt-open    { background: rgba(34,197,94,.15);  color: #22c55e; }
+    .mkt-closed  { background: rgba(100,116,139,.12); color: #64748b; }
+    .mkt-pre     { background: rgba(245,158,11,.15);  color: #f59e0b; }
+    .mkt-after   { background: rgba(139,92,246,.15);  color: #a78bfa; }
+
+    /* ── 카드 장 마감 배지 ─────────────────────────────── */
+    .card-mkt-status {
+      position: absolute; top: 14px; right: 14px;
+      font-size: .6rem; font-weight: 700;
+      padding: 2px 6px; border-radius: 100px;
+    }
+
+    #clock {
+      font-size: .85rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Ticker Bar ────────────────────────────────────── */
+    .ticker-wrap {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      overflow: hidden;
+      height: 36px;
+      position: relative;
+    }
+    .ticker-wrap::before,
+    .ticker-wrap::after {
+      content: '';
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 60px;
+      z-index: 2;
+    }
+    .ticker-wrap::before { left: 0;  background: linear-gradient(to right, var(--surface), transparent); }
+    .ticker-wrap::after  { right: 0; background: linear-gradient(to left,  var(--surface), transparent); }
+
+    .ticker-track {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      height: 100%;
+      animation: ticker 40s linear infinite;
+      white-space: nowrap;
+    }
+    @keyframes ticker {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+
+    .ticker-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 28px;
+      font-size: .78rem;
+      border-right: 1px solid var(--border);
+    }
+    .ticker-name { color: var(--muted); font-weight: 500; }
+    .ticker-val  { font-weight: 600; }
+    .ticker-chg  { font-size: .72rem; }
+    .up   { color: var(--up); }
+    .down { color: var(--down); }
+
+    /* ── Main Layout ───────────────────────────────────── */
+    main {
+      position: relative;
+      z-index: 1;
+      max-width: 1480px;
+      margin: 0 auto;
+      padding: 32px 24px 48px;
+    }
+
+    .section-title {
+      font-size: .75rem;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    /* ── Summary Cards ─────────────────────────────────── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    @media (max-width: 1100px) {
+      .cards-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 600px) {
+      .cards-grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 22px 24px;
+      position: relative;
+      overflow: hidden;
+      transition: transform .2s, box-shadow .2s;
+      cursor: default;
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 40px var(--card-glow);
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 16px 16px 0 0;
+      opacity: 0;
+      transition: opacity .2s;
+    }
+    .card:hover::before { opacity: 1; }
+
+    .card-flag {
+      width: 28px; height: 20px;
+      border-radius: 4px;
+      font-size: .65rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .flag-kr { background: #cd2e3a; color: #fff; }
+    .flag-us { background: #3c3b6e; color: #fff; }
+
+    .card-name  { font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
+    .card-value {
+      font-size: 1.9rem;
+      font-weight: 700;
+      letter-spacing: -1px;
+      font-variant-numeric: tabular-nums;
+      transition: color .3s;
+    }
+    .card-footer {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .card-change {
+      font-size: .82rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .card-badge {
+      font-size: .7rem;
+      padding: 2px 8px;
+      border-radius: 100px;
+      font-weight: 600;
+    }
+    .badge-up   { background: rgba(34,197,94,.15);  color: var(--up); }
+    .badge-down { background: rgba(239,68,68,.15);  color: var(--down); }
+
+    .mini-spark-wrap {
+      margin-top: 14px;
+      height: 42px;
+      position: relative;
+    }
+    .mini-spark {
+      display: block;
+    }
+
+    /* ── Charts Grid ───────────────────────────────────── */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+    @media (max-width: 900px) {
+      .charts-grid { grid-template-columns: 1fr; }
+    }
+
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .chart-card::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none;
+      border-radius: 16px;
+      background: radial-gradient(ellipse 50% 30% at 50% 0%, rgba(59,130,246,.04), transparent);
+    }
+
+    .chart-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .chart-title {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    .chart-subtitle { font-size: .78rem; color: var(--muted); margin-top: 2px; }
+
+    .chart-meta {
+      text-align: right;
+    }
+    .chart-current {
+      font-size: 1.3rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .chart-delta {
+      font-size: .78rem;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    .chart-wrap {
+      position: relative;
+      height: 200px;
+    }
+
+    .chart-footer {
+      display: flex;
+      gap: 16px;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+    .stat-item { flex: 1; }
+    .stat-label { font-size: .7rem; color: var(--muted); }
+    .stat-value { font-size: .85rem; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+    /* ── Update Indicator ──────────────────────────────── */
+    .update-bar {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: .75rem;
+      color: var(--muted);
+      backdrop-filter: blur(8px);
+      z-index: 200;
+    }
+    .update-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    .update-ring {
+      position: absolute;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      border: 1px solid var(--accent);
+      animation: ring 2s ease-out infinite;
+    }
+    @keyframes ring {
+      0%   { opacity: 1; transform: scale(1); }
+      100% { opacity: 0; transform: scale(3.5); }
+    }
+
+    /* ── Spin (loading) ────────────────────────────────── */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ── Flash animation on value change ───────────────── */
+    @keyframes flashUp {
+      0%   { background: rgba(34,197,94,.25); }
+      100% { background: transparent; }
+    }
+    @keyframes flashDown {
+      0%   { background: rgba(239,68,68,.25); }
+      100% { background: transparent; }
+    }
+    .flash-up   { animation: flashUp   .6s ease-out; }
+    .flash-down { animation: flashDown .6s ease-out; }
+
+    /* ── KR 시장 색상 (양전=빨강, 음전=파랑) ──────────────── */
+    .kr-up   { color: #ef4444; }
+    .kr-down { color: #3b82f6; }
+    .badge-kr-up   { background: rgba(239,68,68,.15);  color: #ef4444; }
+    .badge-kr-down { background: rgba(59,130,246,.15); color: #3b82f6; }
+    @keyframes flashKrUp   { 0% { background: rgba(239,68,68,.22); }  100% { background: transparent; } }
+    @keyframes flashKrDown { 0% { background: rgba(59,130,246,.22); } 100% { background: transparent; } }
+    .flash-kr-up   { animation: flashKrUp   .6s ease-out; }
+    .flash-kr-down { animation: flashKrDown .6s ease-out; }
+
+    /* ── 종목 검색 섹션 ──────────────────────────────────── */
+    .search-section { margin-bottom: 24px; }
+    .search-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .search-input {
+      flex: 1; max-width: 360px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      padding: 11px 18px;
+      font-size: .95rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .search-input::placeholder { color: var(--muted); }
+    .search-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+    }
+    .search-btn {
+      background: var(--accent);
+      color: #fff; border: none;
+      border-radius: 12px; padding: 11px 22px;
+      font-size: .9rem; font-weight: 600;
+      cursor: pointer; font-family: inherit;
+      transition: background .2s, transform .15s;
+    }
+    .search-btn:hover:not(:disabled) { background: #2563eb; transform: scale(1.02); }
+    .search-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+    .search-hint { font-size: .78rem; color: var(--muted); }
+    .search-results {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+      gap: 20px;
+    }
+    .search-remove-btn {
+      position: absolute; top: 16px; right: 80px;
+      background: rgba(100,116,139,.08);
+      border: 1px solid rgba(100,116,139,.2);
+      color: var(--muted); border-radius: 8px;
+      padding: 5px 8px; font-size: .75rem;
+      cursor: pointer; z-index: 10;
+      transition: background .2s, color .2s, border-color .2s;
+    }
+    .search-remove-btn:hover {
+      background: rgba(239,68,68,.15); color: #ef4444;
+      border-color: rgba(239,68,68,.3);
+    }
+    .search-error {
+      padding: 14px 18px;
+      background: rgba(239,68,68,.08);
+      border: 1px solid rgba(239,68,68,.2);
+      border-radius: 12px; color: #f87171; font-size: .88rem;
+    }
+    .search-market-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: .6rem; font-weight: 700;
+      padding: 2px 6px; border-radius: 4px;
+      margin-right: 6px; vertical-align: middle;
+    }
+
+    /* ── News / Widget Row ─────────────────────────────── */
+    .widget-row {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 20px;
+      margin-top: 20px;
+    }
+    @media (max-width: 1100px) { .widget-row { grid-template-columns: 1fr; } }
+
+    .news-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+    }
+    .news-item {
+      display: flex;
+      gap: 14px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: flex-start;
+    }
+    .news-item:last-child { border-bottom: none; padding-bottom: 0; }
+    .news-tag {
+      flex-shrink: 0;
+      font-size: .68rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(59,130,246,.15);
+      color: var(--accent);
+      margin-top: 2px;
+    }
+    .news-text { font-size: .85rem; line-height: 1.5; }
+    .news-time { font-size: .72rem; color: var(--muted); margin-top: 4px; }
+
+    .heatmap-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+    }
+    .heat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .heat-cell {
+      border-radius: 10px;
+      padding: 12px 8px;
+      text-align: center;
+      font-size: .72rem;
+      font-weight: 600;
+      transition: transform .2s;
+      cursor: default;
+    }
+    .heat-cell:hover { transform: scale(1.05); }
+    .heat-name  { font-size: .68rem; color: rgba(255,255,255,.7); margin-bottom: 4px; }
+    .heat-val   { font-size: .8rem; font-weight: 700; }
+
+    /* ── 차트 확대 버튼 ─────────────────────────────────── */
+    .chart-expand-btn {
+      position: absolute;
+      top: 16px; right: 16px;
+      background: rgba(59,130,246,.12);
+      border: 1px solid rgba(59,130,246,.25);
+      color: var(--accent);
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: .72rem;
+      font-weight: 600;
+      cursor: pointer;
+      z-index: 10;
+      transition: background .2s, transform .15s, box-shadow .2s;
+      letter-spacing: .02em;
+    }
+    .chart-expand-btn:hover {
+      background: rgba(59,130,246,.28);
+      transform: scale(1.06);
+      box-shadow: 0 0 12px rgba(59,130,246,.3);
+    }
+
+    /* ── 전체화면 모달 ──────────────────────────────────── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      background: rgba(0,0,0,.85);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn .18s ease;
+    }
+    @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+
+    .modal-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      width: min(92vw, 1300px);
+      height: 84vh;
+      display: flex;
+      flex-direction: column;
+      padding: 28px 32px;
+      gap: 14px;
+      position: relative;
+      animation: slideUp .22s cubic-bezier(.34,1.56,.64,1);
+    }
+    @keyframes slideUp {
+      from { transform: translateY(40px) scale(.97); opacity:0 }
+      to   { transform: translateY(0)    scale(1);   opacity:1 }
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .modal-left  { flex: 1; }
+    .modal-title    { font-size: 1.5rem; font-weight: 700; letter-spacing: -.5px; }
+    .modal-subtitle { font-size: .82rem; color: var(--muted); margin-top: 3px; }
+
+    .modal-center { text-align: center; }
+    .modal-price  { font-size: 2.2rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+    .modal-delta  { font-size: .9rem; font-weight: 600; margin-top: 6px; }
+
+    .modal-close {
+      flex-shrink: 0;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      width: 38px; height: 38px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .2s, transform .15s;
+    }
+    .modal-close:hover { background: #2d3748; transform: scale(1.1); }
+
+    .modal-chart-wrap {
+      flex: 1;
+      position: relative;
+      min-height: 0;
+    }
+
+    .modal-footer {
+      display: flex;
+      gap: 0;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .modal-footer .stat-item { flex: 1; min-width: 120px; }
+    .modal-zoom-hint {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: .72rem;
+      color: var(--muted);
+      padding-left: 16px;
+      border-left: 1px solid var(--border);
+      margin-left: auto;
+    }
+    .modal-zoom-hint kbd {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: .68rem;
+    }
+
+    .reset-zoom-btn {
+      background: rgba(59,130,246,.1);
+      border: 1px solid rgba(59,130,246,.2);
+      color: var(--accent);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: .7rem;
+      cursor: pointer;
+      transition: background .2s;
+      margin-left: 8px;
+    }
+    .reset-zoom-btn:hover { background: rgba(59,130,246,.25); }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">📈</div>
+    <span class="logo-text">StockVision</span>
+  </div>
+  <div class="header-right">
+    <div class="market-badges" id="marketBadges"></div>
+    <div class="market-status">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">데이터 수신 중...</span>
+    </div>
+    <div id="clock"></div>
+  </div>
+</header>
+
+<!-- ── Ticker Bar ── -->
+<div class="ticker-wrap">
+  <div class="ticker-track" id="tickerTrack"></div>
+</div>
+
+<main>
+  <!-- ── Summary Cards ── -->
+  <div class="section-title">주요 지수</div>
+  <div class="cards-grid" id="cardsGrid"></div>
+
+  <!-- ── Charts ── -->
+  <div class="section-title">지수 차트 <span style="color:var(--accent);font-weight:700" id="chartSubtitle">· 실시간 데이터 (15초 갱신)</span></div>
+  <div class="charts-grid" id="chartsGrid"></div>
+
+  <!-- ── Ticker Search ── -->
+  <div class="section-title" style="margin-top:36px">
+    🔍 종목 검색
+    <span style="color:var(--muted);font-weight:400;font-size:.7rem;text-transform:none;letter-spacing:0;margin-left:8px">
+      티커 심볼 입력 후 Enter 또는 검색 버튼
+    </span>
+  </div>
+  <div class="search-section">
+    <div class="search-bar">
+      <input type="text" id="searchInput" class="search-input"
+             placeholder="AAPL · TSLA · 005930.KS · ^KS11 …"
+             autocomplete="off" spellcheck="false" />
+      <button id="searchBtn" class="search-btn">🔍 검색</button>
+      <span class="search-hint">
+        🇰🇷 KR: 양전=<span style="color:#ef4444">■빨강</span>&nbsp;음전=<span style="color:#3b82f6">■파랑</span>
+        &nbsp;&nbsp;
+        🇺🇸 US: 양전=<span style="color:#22c55e">■초록</span>&nbsp;음전=<span style="color:#ef4444">■빨강</span>
+      </span>
+    </div>
+    <div id="searchResults" class="search-results"></div>
+  </div>
+
+  <!-- ── Widget Row ── -->
+  <div class="widget-row">
+    <!-- News -->
+    <div class="news-card">
+      <div class="section-title" style="margin-bottom:8px">📰 주요 뉴스</div>
+      <div id="newsFeed"></div>
+    </div>
+    <!-- Heatmap -->
+    <div class="heatmap-card">
+      <div class="section-title" style="margin-bottom:0">🔥 섹터 히트맵</div>
+      <div class="heat-grid" id="heatGrid"></div>
+    </div>
+  </div>
+</main>
+
+<!-- ── Expand Modal ── -->
+<div id="expandModal" class="modal-overlay" style="display:none">
+  <div class="modal-box" id="modalBox">
+    <div class="modal-header">
+      <div class="modal-left">
+        <div class="modal-title" id="modalTitle">—</div>
+        <div class="modal-subtitle" id="modalSubtitle">—</div>
+      </div>
+      <div class="modal-center">
+        <div class="modal-price" id="modalPrice">—</div>
+        <div class="modal-delta" id="modalDelta">—</div>
+      </div>
+      <button class="modal-close" id="modalClose" title="닫기 (ESC)">✕</button>
+    </div>
+    <div class="modal-chart-wrap">
+      <canvas id="modalCanvas"></canvas>
+    </div>
+    <div class="modal-footer">
+      <div class="stat-item">
+        <div class="stat-label">시가</div>
+        <div class="stat-value" id="mOpen">—</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">고가</div>
+        <div class="stat-value up" id="mHigh">—</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">저가</div>
+        <div class="stat-value down" id="mLow">—</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">전일대비</div>
+        <div class="stat-value" id="mChg">—</div>
+      </div>
+      <div class="modal-zoom-hint">
+        <span>🖱 휠 확대/축소</span>
+        <span>드래그 이동</span>
+        <button class="reset-zoom-btn" id="resetZoomBtn">줌 초기화</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Loading Overlay ── -->
+<div id="loadingOverlay" style="
+  position:fixed;inset:0;z-index:500;
+  background:rgba(11,14,26,.92);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+">
+  <div id="loadingSpinner" style="width:48px;height:48px;border-radius:50%;
+              border:3px solid rgba(59,130,246,.25);
+              border-top-color:#3b82f6;
+              animation:spin 1s linear infinite"></div>
+  <div id="loadingTitle" style="color:#e2e8f0;font-size:1rem;font-weight:600">실시간 데이터 로딩 중…</div>
+  <div id="loadingMsg"   style="color:#64748b;font-size:.8rem">Yahoo Finance에서 데이터를 가져오는 중입니다</div>
+  <div id="loadingTimer" style="color:#475569;font-size:.72rem;font-variant-numeric:tabular-nums"></div>
+  <!-- 지연 시 표시되는 버튼 -->
+  <div id="loadingActions" style="display:none;flex-direction:column;align-items:center;gap:10px;margin-top:4px">
+    <button onclick="retryFetch()" style="
+      background:#3b82f6;color:#fff;border:none;border-radius:10px;
+      padding:10px 24px;font-size:.9rem;font-weight:600;cursor:pointer;font-family:inherit;">
+      🔄 다시 시도
+    </button>
+    <button onclick="forceShowUI()" style="
+      background:transparent;color:#64748b;border:1px solid #1f2d45;border-radius:10px;
+      padding:8px 20px;font-size:.82rem;cursor:pointer;font-family:inherit;">
+      → 데이터 없이 그냥 진행
+    </button>
+  </div>
+</div>
+
+<!-- ── Update Indicator ── -->
+<div class="update-bar">
+  <div style="position:relative;width:6px;height:6px;">
+    <div class="update-dot"></div>
+    <div class="update-ring"></div>
+  </div>
+  <span id="updateLabel">데이터 업데이트 중...</span>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════
+   API BASE
+   - file://  → localhost:3001 (로컬 개발)
+   - http(s):// → '' 동일 오리진 (Express가 UI + API 동시 서브)
+     → 로컬 localhost:3001 / 프로덕션 Railway URL 모두 자동 대응
+════════════════════════════════════════════════════════ */
+const API_BASE = location.protocol === 'file:' ? 'http://localhost:3001' : '';
+
+/* ── file:// 접속 감지 → 안내 배너 표시 ─────────────────── */
+if (location.protocol === 'file:') {
+  const _banner = document.createElement('div');
+  _banner.style.cssText = [
+    'position:fixed','top:0','left:0','right:0','z-index:9999',
+    'background:#1e3a5f','color:#93c5fd','font-size:.82rem',
+    'padding:8px 16px','text-align:center','border-bottom:1px solid #3b82f6',
+  ].join(';');
+  _banner.innerHTML =
+    '⚠️ <strong>file://</strong> 로 열었습니다 — ' +
+    '터미널에서 <code style="background:#0d1526;padding:2px 6px;border-radius:4px;color:#22c55e">node server.js</code> 실행 후 ' +
+    '<a href="http://localhost:3001" style="color:#60a5fa;font-weight:700">http://localhost:3001</a>' +
+    ' 으로 접속하면 정상 작동합니다';
+  document.body.prepend(_banner);
+}
+
+/* ════════════════════════════════════════════════════════
+   CONFIG
+════════════════════════════════════════════════════════ */
+const INDICES = [
+  { id:'kospi',   name:'KOSPI',    full:'코스피',  region:'한국 종합주가지수',  flag:'flag-kr', flagTxt:'KR', color:'#3b82f6', decimals:2, market:'kr' },
+  { id:'samsung', name:'삼성전자', full:'삼성전자', region:'KRX · 005930',      flag:'flag-kr', flagTxt:'KR', color:'#8b5cf6', decimals:0, market:'kr' },
+  { id:'lg',      name:'LG전자',   full:'LG전자',  region:'KRX · 066570',      flag:'flag-kr', flagTxt:'KR', color:'#22c55e', decimals:0, market:'kr' },
+  { id:'tesla',   name:'Tesla',    full:'테슬라',  region:'NASDAQ · TSLA',     flag:'flag-us', flagTxt:'US', color:'#f59e0b', decimals:2, market:'us' },
+];
+
+// ID → idx 빠른 조회 맵
+const IDX_MAP = Object.fromEntries(INDICES.map(i => [i.id, i]));
+
+const FETCH_MS = 15_000;  // API 갱신 주기 (15초)
+const TICK_MS  = 2_000;   // 티커 UI 갱신 주기 (2초)
+
+/* ════════════════════════════════════════════════════════
+   STATE  (실제 데이터를 받기 전까지 null)
+════════════════════════════════════════════════════════ */
+const state = {};
+INDICES.forEach(idx => {
+  state[idx.id] = {
+    current:   null,
+    open:      null,
+    prevClose: null,
+    high:      null,
+    low:       null,
+    history:   [],
+    labels:    [],
+    loaded:    false,
+  };
+});
+
+let chartsReady = false;
+let _loadStart  = Date.now();   // 로딩 시작 시각
+
+/* ── 강제 UI 표시 (오류/타임아웃 시) ────────────────────── */
+function forceShowUI(msg) {
+  if (chartsReady) return;
+  clearInterval(_loadTimerInterval);
+  buildCards();
+  buildCharts();
+  buildTicker();
+  document.getElementById('loadingOverlay').style.display = 'none';
+  chartsReady = true;
+  setStatus('error');
+  document.getElementById('updateLabel').textContent =
+    msg || '연결 오류 — 잠시 후 재시도합니다';
+}
+
+function retryFetch() {
+  _loadStart = Date.now();
+  document.getElementById('loadingTitle').textContent   = '재연결 중…';
+  document.getElementById('loadingMsg').textContent     = 'Yahoo Finance에 다시 접속합니다';
+  document.getElementById('loadingActions').style.display = 'none';
+  document.getElementById('loadingTimer').textContent   = '';
+  setStatus('connecting');
+  fetchData();
+}
+
+/* ── 로딩 오버레이 타이머 (초 카운트 + 단계 메시지) ────── */
+const _loadTimerInterval = setInterval(() => {
+  if (chartsReady) { clearInterval(_loadTimerInterval); return; }
+  const elapsed = Math.round((Date.now() - _loadStart) / 1000);
+  document.getElementById('loadingTimer').textContent = `${elapsed}초 경과`;
+  if (elapsed === 5) {
+    document.getElementById('loadingMsg').textContent = '연결이 지연되고 있습니다…';
+  }
+  if (elapsed === 10) {
+    document.getElementById('loadingMsg').textContent = 'Yahoo Finance 응답이 없습니다';
+    document.getElementById('loadingActions').style.display = 'flex';
+  }
+  if (elapsed >= 20) {
+    // 20초 지나면 자동으로 강제 표시
+    forceShowUI('연결 시간 초과 — Yahoo Finance 접근 불가');
+  }
+}, 1000);
+
+/* ════════════════════════════════════════════════════════
+   HELPERS
+════════════════════════════════════════════════════════ */
+function fmt(v, decimals = 2) {
+  if (v === null || v === undefined || isNaN(v)) return '---';
+  return v.toLocaleString('ko-KR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+function fmtPct(v) {
+  if (v === null || isNaN(v)) return '---';
+  return (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+}
+function fmtChg(v, dec = 2) {
+  if (v === null || isNaN(v)) return '---';
+  return (v >= 0 ? '+' : '') + fmt(v, dec);
+}
+function pctChange(current, ref) {
+  if (!current || !ref) return 0;
+  return (current - ref) / ref * 100;
+}
+
+/* ── Market-aware 색상 헬퍼 ──────────────────────────────
+   KR: 양전(up)=빨강(#ef4444), 음전(down)=파랑(#3b82f6)
+   US: 양전(up)=초록(#22c55e), 음전(down)=빨강(#ef4444)
+──────────────────────────────────────────────────────── */
+function upCls(market)  { return market === 'kr' ? 'kr-up'   : 'up'; }
+function downCls(market){ return market === 'kr' ? 'kr-down' : 'down'; }
+function dirCls(isUp, market) { return isUp ? upCls(market) : downCls(market); }
+function badgeCls(isUp, market) {
+  return isUp
+    ? (market === 'kr' ? 'badge-kr-up'   : 'badge-up')
+    : (market === 'kr' ? 'badge-kr-down' : 'badge-down');
+}
+function upHex(market)  { return market === 'kr' ? '#ef4444' : '#22c55e'; }
+function downHex(market){ return market === 'kr' ? '#3b82f6' : '#ef4444'; }
+function dirHex(isUp, market) { return isUp ? upHex(market) : downHex(market); }
+function flashCls(isUp, market) {
+  return market === 'kr'
+    ? (isUp ? 'flash-kr-up' : 'flash-kr-down')
+    : (isUp ? 'flash-up'    : 'flash-down');
+}
+function timeLabel() {
+  const now = new Date();
+  return `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+}
+
+/* ════════════════════════════════════════════════════════
+   MARKET STATUS  (장 개폐장 판별)
+════════════════════════════════════════════════════════ */
+/**
+ * market: 'kr' | 'us'
+ * returns { status:'open'|'closed'|'pre'|'after', label, cssClass, nextOpenKST }
+ * 모든 시각은 KST 기준
+ */
+function getMarketStatus(market) {
+  const now = new Date();
+  // KST = UTC+9
+  const kst  = new Date(now.getTime() + 9 * 3600_000);
+  const day  = kst.getUTCDay();   // 0=일, 6=토
+  const h    = kst.getUTCHours();
+  const m    = kst.getUTCMinutes();
+  const hm   = h * 100 + m;       // e.g. 9:15 → 915
+
+  const isWeekday = day >= 1 && day <= 5;
+
+  if (market === 'kr') {
+    // KRX: 정규장 09:00~15:30 KST
+    if (!isWeekday) return { status:'closed', label:'주말 휴장', cssClass:'mkt-closed', nextOpen:'월요일 09:00' };
+    if (hm >= 800  && hm < 900)  return { status:'pre',    label:'KR 장전', cssClass:'mkt-pre',    nextOpen:'09:00' };
+    if (hm >= 900  && hm < 1530) return { status:'open',   label:'KR 개장중', cssClass:'mkt-open',  nextOpen:null };
+    if (hm >= 1530 && hm < 1800) return { status:'after',  label:'KR 장후', cssClass:'mkt-after',  nextOpen:'익일 09:00' };
+    return { status:'closed', label:'KR 장마감', cssClass:'mkt-closed', nextOpen:'익일 09:00' };
+  }
+
+  if (market === 'us') {
+    // NASDAQ/NYSE: ET 09:30~16:00 = KST 22:30~05:00(익일)
+    // Pre-market ET 04:00~09:30 = KST 17:00~22:30
+    // After-hours ET 16:00~20:00 = KST 05:00~09:00
+    if (!isWeekday) return { status:'closed', label:'주말 휴장', cssClass:'mkt-closed', nextOpen:'월요일 22:30' };
+    // KST 22:30 이후 또는 05:00 이전 → US 정규장
+    if (hm >= 2230 || hm < 500)  return { status:'open',   label:'US 개장중', cssClass:'mkt-open',  nextOpen:null };
+    if (hm >= 500  && hm < 900)  return { status:'after',  label:'US 시간외', cssClass:'mkt-after',  nextOpen:'22:30' };
+    if (hm >= 1700 && hm < 2230) return { status:'pre',    label:'US 프리마켓', cssClass:'mkt-pre', nextOpen:'22:30' };
+    return { status:'closed', label:'US 장마감', cssClass:'mkt-closed', nextOpen:'22:30 (프리마켓 17:00)' };
+  }
+
+  return { status:'closed', label:'장마감', cssClass:'mkt-closed', nextOpen:null };
+}
+
+function updateMarketBadges() {
+  const kr = getMarketStatus('kr');
+  const us = getMarketStatus('us');
+  const container = document.getElementById('marketBadges');
+  if (!container) return;
+  container.innerHTML = `
+    <span class="mkt-badge ${kr.cssClass}" title="${kr.nextOpen ? '다음 개장: ' + kr.nextOpen : ''}">
+      🇰🇷 ${kr.label}
+    </span>
+    <span class="mkt-badge ${us.cssClass}" title="${us.nextOpen ? '다음 개장: ' + us.nextOpen : ''}">
+      🇺🇸 ${us.label}
+    </span>
+  `;
+  // 헤더 상태 표시 업데이트
+  const krOpen = kr.status === 'open';
+  const usOpen = us.status === 'open';
+  const anyOpen = krOpen || usOpen;
+  const dot  = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  if (dot && text) {
+    // 실제 데이터 연결 상태가 ok인 경우에만 장 상태 반영
+    if (dot.style.background === 'rgb(34, 197, 94)' || dot.style.background === '#22c55e') {
+      if (!anyOpen) {
+        dot.style.background  = '#64748b';
+        dot.style.animation   = 'none';
+        text.textContent      = '장 마감 (데이터 정상)';
+      }
+    }
+  }
+}
+
+/* ════════════════════════════════════════════════════════
+   CLOCK
+════════════════════════════════════════════════════════ */
+function updateClock() {
+  const now = timeLabel();
+  document.getElementById('clock').textContent = now;
+  // 매 분 정각마다 장 상태 배지 갱신
+  if (now.endsWith(':00')) updateMarketBadges();
+}
+setInterval(updateClock, 1000);
+updateClock();
+updateMarketBadges(); // 즉시 1회 실행
+
+/* ════════════════════════════════════════════════════════
+   BUILD SUMMARY CARDS
+════════════════════════════════════════════════════════ */
+function buildCards() {
+  const grid = document.getElementById('cardsGrid');
+  grid.innerHTML = '';
+  INDICES.forEach(idx => {
+    const s   = state[idx.id];
+    const pct = pctChange(s.current, s.prevClose);
+    const chg = s.current - s.prevClose;
+    const up  = pct >= 0;
+    const dc  = dirCls(up, idx.market);
+    const bc  = badgeCls(up, idx.market);
+
+    const mktSt = getMarketStatus(idx.market);
+    const mktBadgeHtml = mktSt.status !== 'open'
+      ? `<span class="card-mkt-status mkt-badge ${mktSt.cssClass}" title="${mktSt.nextOpen ? '다음 개장: '+mktSt.nextOpen : ''}">${mktSt.label}</span>`
+      : '';
+    grid.insertAdjacentHTML('beforeend', `
+      <div class="card" id="card-${idx.id}">
+        ${mktBadgeHtml}
+        <span class="card-flag ${idx.flag}">${idx.flagTxt}</span>
+        <div class="card-name">${idx.full}</div>
+        <div class="card-value ${dc}" id="cv-${idx.id}">${fmt(s.current, idx.decimals)}</div>
+        <div class="card-footer">
+          <span class="card-change ${dc}" id="cc-${idx.id}">${fmtChg(chg, idx.decimals)}</span>
+          <span class="card-badge ${bc}" id="cb-${idx.id}">${fmtPct(pct)}</span>
+        </div>
+        <div class="mini-spark-wrap"><canvas id="spark-${idx.id}"></canvas></div>
+      </div>
+    `);
+  });
+  // Build sparklines
+  INDICES.forEach(idx => buildSparkline(idx));
+}
+
+const sparkCharts = {};
+function buildSparkline(idx) {
+  const canvas = document.getElementById(`spark-${idx.id}`);
+  const s      = state[idx.id];
+  const data   = s.history.slice(-20);
+  const up     = data[data.length-1] >= s.prevClose;
+  const color  = dirHex(up, idx.market);
+
+  sparkCharts[idx.id] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: data.map(()=>''),
+      datasets: [{
+        data,
+        borderColor:     color,
+        borderWidth:     1.5,
+        fill:            true,
+        backgroundColor: hexToRgba(color, .08),
+        tension:         .4,
+        pointRadius:     0,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales:  { x: { display: false }, y: { display: false } },
+      animation: { duration: 400 },
+    },
+  });
+}
+
+/* ════════════════════════════════════════════════════════
+   BUILD MAIN CHARTS
+════════════════════════════════════════════════════════ */
+const mainCharts = {};
+function buildCharts() {
+  const grid = document.getElementById('chartsGrid');
+  grid.innerHTML = '';
+  INDICES.forEach(idx => {
+    const s   = state[idx.id];
+    const pct = pctChange(s.current, s.prevClose);
+    const up  = pct >= 0;
+
+    const dec = idx.decimals ?? 2;
+    const dc  = dirCls(up, idx.market);
+    grid.insertAdjacentHTML('beforeend', `
+      <div class="chart-card" style="position:relative">
+        <button class="chart-expand-btn" data-idx="${idx.id}" title="전체화면으로 확대">⛶ 확대</button>
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">${idx.name}</div>
+            <div class="chart-subtitle">${idx.region}</div>
+          </div>
+          <div class="chart-meta">
+            <div class="chart-current ${dc}" id="mc-${idx.id}">${fmt(s.current, dec)}</div>
+            <div class="chart-delta  ${dc}" id="md-${idx.id}">${fmtPct(pct)}</div>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="chart-${idx.id}"></canvas>
+        </div>
+        <div class="chart-footer">
+          <div class="stat-item">
+            <div class="stat-label">시가</div>
+            <div class="stat-value" id="stat-open-${idx.id}">${fmt(s.open, dec)}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">고가</div>
+            <div class="stat-value ${upCls(idx.market)}" id="stat-high-${idx.id}">${fmt(s.high, dec)}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">저가</div>
+            <div class="stat-value ${downCls(idx.market)}" id="stat-low-${idx.id}">${fmt(s.low, dec)}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">전일대비</div>
+            <div class="stat-value ${dc}" id="stat-chg-${idx.id}">${fmtChg(s.current-s.prevClose, dec)}</div>
+          </div>
+        </div>
+      </div>
+    `);
+  });
+
+  INDICES.forEach(idx => {
+    const s      = state[idx.id];
+    const canvas = document.getElementById(`chart-${idx.id}`);
+    const up     = s.current >= s.prevClose;
+    const color  = idx.color;
+    const dec    = idx.decimals ?? 2;
+
+    mainCharts[idx.id] = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels:   [...s.labels],
+        datasets: [{
+          data:            [...s.history],
+          borderColor:     color,
+          borderWidth:     2,
+          fill:            true,
+          backgroundColor: (ctx) => {
+            const chart  = ctx.chart;
+            const {ctx:c, chartArea} = chart;
+            if (!chartArea) return 'transparent';
+            const grad = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            grad.addColorStop(0,   hexToRgba(color, .25));
+            grad.addColorStop(.6,  hexToRgba(color, .05));
+            grad.addColorStop(1,   'transparent');
+            return grad;
+          },
+          tension:     .4,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: color,
+          pointHoverBorderColor: '#fff',
+          pointHoverBorderWidth: 2,
+        }],
+      },
+      options: {
+        responsive:          true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#1a2235',
+            borderColor:     '#1f2d45',
+            borderWidth:     1,
+            titleColor:      '#64748b',
+            bodyColor:       '#e2e8f0',
+            padding:         10,
+            callbacks: {
+              label: ctx => ` ${fmt(ctx.parsed.y)}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            display:    false,
+            grid:       { display: false },
+          },
+          y: {
+            position:   'right',
+            grid:       { color: 'rgba(31,45,69,.6)', drawBorder: false },
+            ticks: {
+              color:    '#64748b',
+              font:     { size: 11 },
+              callback: v => fmt(v, dec),
+            },
+          },
+        },
+        animation: { duration: 500, easing: 'easeInOutCubic' },
+      },
+    });
+  });
+}
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/* ════════════════════════════════════════════════════════
+   REAL-DATA FETCH  (Yahoo Finance via local Express API)
+════════════════════════════════════════════════════════ */
+async function fetchData() {
+  setStatus('connecting');
+  try {
+    const res  = await fetch(`${API_BASE}/api/quotes`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'API error');
+
+    const data = json.data;
+    INDICES.forEach(idx => {
+      const d = data[idx.id];
+      if (!d) return;
+      const s      = state[idx.id];
+      const prevCurrent = s.current;
+
+      s.prevClose = d.prevClose;
+      s.open      = d.open;
+      s.high      = d.high;
+      s.low       = d.low;
+      s.current   = d.current;
+      s.loaded    = true;
+      s._prevTick = prevCurrent;   // for flash direction
+
+      // Full intraday history from API
+      s.history = (d.history || []).map(p => p.value);
+      s.labels  = (d.history || []).map(p => {
+        const dt = new Date(p.time);
+        return `${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+      });
+    });
+
+    if (!chartsReady) {
+      buildCards();
+      buildCharts();
+      buildTicker();
+      document.getElementById('loadingOverlay').style.display = 'none';
+      chartsReady = true;
+    } else {
+      updateAllDisplays();
+    }
+
+    setStatus('ok');
+    document.getElementById('updateLabel').textContent = `마지막 업데이트: ${timeLabel()}`;
+  } catch (e) {
+    console.error('fetchData:', e);
+    setStatus('error');
+    document.getElementById('updateLabel').textContent = `연결 오류 — 재시도 중 (${e.message})`;
+    // ★ 첫 로드 실패 시 스피너 무한루프 방지 — 즉시 UI 표시
+    if (!chartsReady) {
+      forceShowUI(`데이터 로드 실패 — ${e.message}`);
+    }
+  }
+}
+
+/* ── API 상태 표시 ───────────────────────────────────── */
+function setStatus(status) {
+  const dot  = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  const colors = { ok:'#22c55e', error:'#ef4444', connecting:'#f59e0b' };
+  const labels = { ok:'실시간 연결됨', error:'연결 오류', connecting:'데이터 수신 중…' };
+  if (dot)  dot.style.background = colors[status];
+  if (text) text.textContent     = labels[status];
+}
+
+/* ════════════════════════════════════════════════════════
+   UPDATE ALL DISPLAYS  (데이터 수신 후 두 번째 호출부터)
+════════════════════════════════════════════════════════ */
+function updateAllDisplays() {
+  INDICES.forEach(idx => {
+    const s   = state[idx.id];
+    const dec = idx.decimals ?? 2;
+    if (!s.loaded) return;
+
+    const pct    = pctChange(s.current, s.prevClose);
+    const chg    = s.current - s.prevClose;
+    const up     = pct >= 0;
+    const wentUp = s._prevTick === null || s.current >= (s._prevTick ?? s.current);
+
+    // ── Card ──
+    const dc  = dirCls(up, idx.market);
+    const bc  = badgeCls(up, idx.market);
+    const cvEl = document.getElementById(`cv-${idx.id}`);
+    const ccEl = document.getElementById(`cc-${idx.id}`);
+    const cbEl = document.getElementById(`cb-${idx.id}`);
+    if (cvEl) {
+      cvEl.textContent = fmt(s.current, dec);
+      cvEl.className   = `card-value ${dc}`;
+      ccEl.textContent = fmtChg(chg, dec);
+      ccEl.className   = `card-change ${dc}`;
+      cbEl.textContent = fmtPct(pct);
+      cbEl.className   = `card-badge ${bc}`;
+
+      const card = document.getElementById(`card-${idx.id}`);
+      if (card) {
+        card.classList.remove('flash-up','flash-down','flash-kr-up','flash-kr-down');
+        void card.offsetWidth;
+        card.classList.add(flashCls(wentUp, idx.market));
+      }
+    }
+
+    // ── Sparkline ──
+    const sp = sparkCharts[idx.id];
+    if (sp) {
+      const sparkData = s.history.slice(-20);
+      const spColor   = dirHex(up, idx.market);
+      sp.data.labels           = sparkData.map(() => '');
+      sp.data.datasets[0].data = sparkData;
+      sp.data.datasets[0].borderColor     = spColor;
+      sp.data.datasets[0].backgroundColor = hexToRgba(spColor, .08);
+      sp.update('none');
+    }
+
+    // ── Main chart ──
+    const mc = mainCharts[idx.id];
+    if (mc) {
+      mc.data.labels           = [...s.labels];
+      mc.data.datasets[0].data = [...s.history];
+      mc.update();
+    }
+
+    // ── Chart header meta ──
+    const mcEl = document.getElementById(`mc-${idx.id}`);
+    const mdEl = document.getElementById(`md-${idx.id}`);
+    if (mcEl) {
+      mcEl.textContent = fmt(s.current, dec);
+      mcEl.className   = `chart-current ${dc}`;
+      mdEl.textContent = fmtPct(pct);
+      mdEl.className   = `chart-delta ${dc}`;
+    }
+
+    // ── Stats footer ──
+    const hEl = document.getElementById(`stat-high-${idx.id}`);
+    const lEl = document.getElementById(`stat-low-${idx.id}`);
+    const cEl = document.getElementById(`stat-chg-${idx.id}`);
+    if (hEl) {
+      hEl.textContent = fmt(s.high, dec);
+      lEl.textContent = fmt(s.low,  dec);
+      cEl.textContent = fmtChg(chg, dec);
+      cEl.className   = `stat-value ${dc}`;
+    }
+  });
+
+  buildTicker();
+}
+
+/* ════════════════════════════════════════════════════════
+   TICKER BAR
+════════════════════════════════════════════════════════ */
+const TICKER_EXTRAS = [
+  { name:'SK하이닉스', val:196000,  chg:-0.8, dec:0 },
+  { name:'Apple',      val:214.32,  chg:+0.5, dec:2 },
+  { name:'NVIDIA',     val:1082.50, chg:+3.4, dec:2 },
+  { name:'카카오',     val:38950,   chg:-1.2, dec:0 },
+  { name:'Microsoft',  val:458.30,  chg:+0.9, dec:2 },
+  { name:'현대차',     val:225000,  chg:+0.4, dec:0 },
+  { name:'Amazon',     val:228.50,  chg:+1.1, dec:2 },
+  { name:'POSCO',      val:312500,  chg:-0.5, dec:0 },
+];
+
+function buildTicker() {
+  const track = document.getElementById('tickerTrack');
+  const items = [
+    ...INDICES.map(idx => {
+      const s   = state[idx.id];
+      const pct = pctChange(s.current, s.prevClose);
+      const up  = pct >= 0;
+      return { name: idx.name, val: fmt(s.current, idx.decimals), pct: fmtPct(pct), up };
+    }),
+    ...TICKER_EXTRAS.map(e => {
+      const up = e.chg >= 0;
+      return { name: e.name, val: fmt(e.val, e.dec ?? 2), pct: (up?'+':'') + e.chg.toFixed(1) + '%', up };
+    }),
+  ];
+
+  // Duplicate for seamless loop
+  const html = [...items, ...items].map(it => `
+    <div class="ticker-item">
+      <span class="ticker-name">${it.name}</span>
+      <span class="ticker-val ${it.up?'up':'down'}">${it.val}</span>
+      <span class="ticker-chg ${it.up?'up':'down'}">${it.pct}</span>
+    </div>
+  `).join('');
+  track.innerHTML = html;
+}
+
+/* ════════════════════════════════════════════════════════
+   NEWS FEED
+════════════════════════════════════════════════════════ */
+/* ── 뉴스 우선순위: ① 반도체 핵심 ② 삼성전자 ③ LG전자 ④ 테슬라 ── */
+const NEWS = [
+  {
+    tag: '🔥반도체', tagColor: '#f59e0b',
+    text: '5월 제조업 PSI, 반도체 업황 지수 167 기록 — 3개월 만에 확장 국면 전환. HBM 수출 급증이 전체 제조업 회복 견인',
+    time: '오늘 07:24', priority: 1,
+    source: '한국경제',
+    url: 'https://search.naver.com/search.naver?where=news&query=PSI+반도체+업황+지수+167+HBM',
+  },
+  {
+    tag: '🔥반도체', tagColor: '#f59e0b',
+    text: 'HBM·AI 서버 반도체 수요 급증, 올해 수출 사상 첫 9,000억달러 돌파 전망. 반도체가 전체 수출 성장 주도',
+    time: '어제 15:02', priority: 1,
+    source: '연합뉴스',
+    url: 'https://search.naver.com/search.naver?where=news&query=HBM+반도체+수출+9000억달러+돌파',
+  },
+  {
+    tag: '삼성전자', tagColor: '#3b82f6',
+    text: 'SK하이닉스 시총 1조달러 돌파 — 삼성·TSMC에 이어 세 번째 초대형 클럽 합류. 삼성전자·SK하이닉스가 코스피 시총 50% 차지, 코스피 1만선 돌파 전망 부상',
+    time: '오늘 17:10', priority: 2,
+    source: '매일경제',
+    url: 'https://search.naver.com/search.naver?where=news&query=SK하이닉스+시총+1조달러+코스피',
+  },
+  {
+    tag: '삼성전자', tagColor: '#3b82f6',
+    text: '삼성전자, 테슬라 AI6 칩 생산 계약 165억달러(약 24조원) 수주 보도 — 파운드리 사업 수주 회복·기술경쟁력 재확인',
+    time: '5월 17일', priority: 2,
+    source: '조선일보',
+    url: 'https://search.naver.com/search.naver?where=news&query=삼성전자+테슬라+AI6+165억달러+파운드리',
+  },
+  {
+    tag: 'LG전자', tagColor: '#22c55e',
+    text: 'LG전자 1Q 어닝서프라이즈 후 외국인 매도세에 장중 약세. 증권가 "전장(VS)·HVAC B2B 중장기 성장성은 유효" 평가 유지',
+    time: '오늘 15:00', priority: 3,
+    source: '뉴스1',
+    url: 'https://search.naver.com/search.naver?where=news&query=LG전자+어닝서프라이즈+외국인+매도',
+  },
+  {
+    tag: 'LG전자', tagColor: '#22c55e',
+    text: 'LG전자, 1,000억원 자사주 매입 절반 집행 완료 — 주가 상승으로 취득 물량 감소. 1Q 실적이 지난해 연간의 80% 초과',
+    time: '오늘 14:50', priority: 3,
+    source: '머니투데이',
+    url: 'https://search.naver.com/search.naver?where=news&query=LG전자+자사주+매입+1000억+집행',
+  },
+  {
+    tag: '테슬라', tagColor: '#ec4899',
+    text: '테슬라, FSD 자율주행 소프트웨어 글로벌 전방위 확장 선언 — 북미를 넘어 전 세계 핵심 시장 진출로 자율주행 시장 독점 포석',
+    time: '5월 21일', priority: 4,
+    source: 'Reuters',
+    url: 'https://search.naver.com/search.naver?where=news&query=테슬라+FSD+자율주행+글로벌+확장',
+  },
+  {
+    tag: '반도체', tagColor: '#f59e0b',
+    text: '삼성·SK하이닉스 HBM 기술 격차 4~5년 유지 — 미국 장비 수출규제로 중국 CXMT의 단기 추격 제한. 삼성 2027년 글로벌 AI 반도체 생산거점 준공 목표',
+    time: '어제 08:00', priority: 1,
+    source: '전자신문',
+    url: 'https://search.naver.com/search.naver?where=news&query=삼성+SK하이닉스+HBM+기술격차+CXMT',
+  },
+];
+
+function buildNews() {
+  const feed = document.getElementById('newsFeed');
+  // 우선순위 정렬 (priority 낮을수록 상위)
+  const sorted = [...NEWS].sort((a, b) => (a.priority ?? 9) - (b.priority ?? 9));
+  feed.innerHTML = sorted.map(n => {
+    const color = n.tagColor || 'var(--accent)';
+    const isHot = n.priority === 1;
+    const srcLink = n.url
+      ? `<a href="${n.url}" target="_blank" rel="noopener"
+           style="margin-left:8px;color:#60a5fa;font-size:.72rem;text-decoration:none;
+                  border:1px solid #1e3a5f;border-radius:4px;padding:1px 6px;
+                  white-space:nowrap;transition:background .15s"
+           onmouseover="this.style.background='rgba(59,130,246,.15)'"
+           onmouseout="this.style.background=''"
+         >↗ ${n.source || '출처'}</a>`
+      : '';
+    return `
+    <div class="news-item">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0">
+        <span class="news-tag" style="background:${color}22;color:${color};border:1px solid ${color}44;white-space:nowrap">${n.tag}</span>
+        ${isHot ? `<span style="font-size:.6rem;color:#f59e0b;font-weight:700;letter-spacing:.05em">★필독</span>` : ''}
+      </div>
+      <div>
+        <div class="news-text">${n.text}</div>
+        <div class="news-time" style="display:flex;align-items:center;flex-wrap:wrap;gap:2px">
+          <span>${n.time}</span>${srcLink}
+        </div>
+      </div>
+    </div>
+  `}).join('');
+}
+
+/* ════════════════════════════════════════════════════════
+   SECTOR HEATMAP
+════════════════════════════════════════════════════════ */
+const SECTORS = [
+  { name:'반도체', chg: 2.4 },
+  { name:'자동차', chg:-0.7 },
+  { name:'바이오', chg: 1.1 },
+  { name:'에너지', chg:-1.5 },
+  { name:'금융',   chg: 0.3 },
+  { name:'통신',   chg: 0.8 },
+  { name:'소비재', chg:-0.3 },
+  { name:'IT',      chg: 3.1 },
+  { name:'철강',   chg:-0.9 },
+];
+
+function heatColor(chg) {
+  /* 히트맵: 양전(+)=파란색 음영, 음전(-)=빨간색 음영 */
+  if (chg >  2) return ['#0d1b42', '#3b82f6'];   // 강한 상승: 진파랑 bg, 밝은 파랑
+  if (chg >  0) return ['#0f2048', '#93c5fd'];   // 약한 상승: 중간 파랑 bg, 연파랑
+  if (chg > -1) return ['#3a1212', '#f87171'];   // 약한 하락: 어두운 빨강 bg, 연빨강
+  return              ['#4a0808', '#ef4444'];    // 강한 하락: 진빨강 bg, 밝은 빨강
+}
+
+function buildHeatmap() {
+  const grid = document.getElementById('heatGrid');
+  grid.innerHTML = SECTORS.map(s => {
+    const [bg, fg] = heatColor(s.chg);
+    const up = s.chg >= 0;
+    return `
+      <div class="heat-cell" style="background:${bg}; color:${fg}">
+        <div class="heat-name">${s.name}</div>
+        <div class="heat-val">${up?'+':''}${s.chg.toFixed(1)}%</div>
+      </div>
+    `;
+  }).join('');
+}
+
+/* ════════════════════════════════════════════════════════
+   EXPAND MODAL + ZOOM
+════════════════════════════════════════════════════════ */
+let modalChartInst = null;
+
+function openModal(idxId) {
+  const idx = IDX_MAP[idxId];
+  const s   = state[idxId];
+  if (!idx || !s?.loaded) return;
+
+  const dec = idx.decimals ?? 2;
+  const pct = pctChange(s.current, s.prevClose);
+  const chg = s.current - s.prevClose;
+  const up  = pct >= 0;
+  const dc  = dirCls(up, idx.market);
+
+  // ── 헤더 채우기 ──
+  document.getElementById('modalTitle').textContent    = idx.full;
+  document.getElementById('modalSubtitle').textContent = idx.region;
+
+  const priceEl = document.getElementById('modalPrice');
+  priceEl.textContent = fmt(s.current, dec);
+  priceEl.className   = `modal-price ${dc}`;
+
+  const deltaEl = document.getElementById('modalDelta');
+  deltaEl.textContent = `${fmtChg(chg, dec)}  (${fmtPct(pct)})`;
+  deltaEl.className   = `modal-delta ${dc}`;
+
+  // ── 통계 채우기 ──
+  document.getElementById('mOpen').textContent = fmt(s.open, dec);
+  const highEl = document.getElementById('mHigh');
+  highEl.textContent = fmt(s.high, dec);
+  highEl.className   = `stat-value ${upCls(idx.market)}`;
+  const lowEl = document.getElementById('mLow');
+  lowEl.textContent  = fmt(s.low, dec);
+  lowEl.className    = `stat-value ${downCls(idx.market)}`;
+  const chgEl = document.getElementById('mChg');
+  chgEl.textContent = fmtChg(chg, dec);
+  chgEl.className   = `stat-value ${dc}`;
+
+  // ── 이전 모달 차트 정리 ──
+  if (modalChartInst) { modalChartInst.destroy(); modalChartInst = null; }
+
+  // ── 새 모달 차트 생성 ──
+  const canvas = document.getElementById('modalCanvas');
+  const color  = idx.color;
+
+  modalChartInst = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels:   [...s.labels],
+      datasets: [{
+        data:            [...s.history],
+        borderColor:     color,
+        borderWidth:     2,
+        fill:            true,
+        backgroundColor: (ctx) => {
+          const { ctx: c, chartArea } = ctx.chart;
+          if (!chartArea) return 'transparent';
+          const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+          g.addColorStop(0,  hexToRgba(color, .3));
+          g.addColorStop(.7, hexToRgba(color, .05));
+          g.addColorStop(1,  'transparent');
+          return g;
+        },
+        tension:     .4,
+        pointRadius: 0,
+        pointHoverRadius:          6,
+        pointHoverBackgroundColor: color,
+        pointHoverBorderColor:     '#fff',
+        pointHoverBorderWidth:     2,
+      }],
+    },
+    options: {
+      responsive:          true,
+      maintainAspectRatio: false,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a2235',
+          borderColor:     '#1f2d45',
+          borderWidth:     1,
+          titleColor:      '#64748b',
+          bodyColor:       '#e2e8f0',
+          padding:         12,
+          callbacks: { label: ctx => ` ${fmt(ctx.parsed.y, dec)}` },
+        },
+        zoom: {
+          zoom: {
+            wheel:  { enabled: true, speed: 0.08 },
+            pinch:  { enabled: true },
+            mode:   'x',
+          },
+          pan: {
+            enabled: true,
+            mode:    'x',
+            threshold: 5,
+          },
+        },
+      },
+      scales: {
+        x: {
+          display: true,
+          grid:    { color:'rgba(31,45,69,.35)', drawBorder:false },
+          ticks: {
+            color:         '#64748b',
+            font:          { size: 11 },
+            maxRotation:   0,
+            maxTicksLimit: 14,
+          },
+        },
+        y: {
+          position: 'right',
+          grid:     { color:'rgba(31,45,69,.5)', drawBorder:false },
+          ticks: {
+            color:    '#64748b',
+            font:     { size: 12 },
+            callback: v => fmt(v, dec),
+          },
+        },
+      },
+      animation: { duration: 350 },
+    },
+  });
+
+  // ── 더블클릭 줌 초기화 ──
+  canvas.ondblclick = () => modalChartInst?.resetZoom();
+
+  // ── 모달 표시 ──
+  document.getElementById('expandModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal() {
+  document.getElementById('expandModal').style.display = 'none';
+  document.body.style.overflow = '';
+  if (modalChartInst) { modalChartInst.destroy(); modalChartInst = null; }
+}
+
+// 확대 버튼 클릭 이벤트 (위임)
+document.getElementById('chartsGrid').addEventListener('click', e => {
+  const btn = e.target.closest('.chart-expand-btn');
+  if (btn) openModal(btn.dataset.idx);
+});
+
+// 닫기 버튼 / 오버레이 클릭 / ESC
+document.getElementById('modalClose').addEventListener('click', closeModal);
+document.getElementById('resetZoomBtn').addEventListener('click', () => modalChartInst?.resetZoom());
+document.getElementById('expandModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('expandModal')) closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+/* ════════════════════════════════════════════════════════
+   INIT
+════════════════════════════════════════════════════════ */
+buildNews();
+buildHeatmap();
+
+// 즉시 1회 + 15초마다 실데이터 fetch
+fetchData();
+setInterval(fetchData, FETCH_MS);
+
+// 2초마다 티커 UI 갱신 (로딩 완료 이후에만)
+setInterval(() => { if (chartsReady) buildTicker(); }, TICK_MS);
+
+/* ════════════════════════════════════════════════════════
+   TICKER SEARCH
+════════════════════════════════════════════════════════ */
+const searchState      = {};   // sym → API response data
+const searchCharts     = {};   // sym → Chart instance
+const searchChartColors = {};  // sym → assigned color
+let   searchColorIdx   = 0;
+const SEARCH_PALETTE   = ['#ec4899','#06b6d4','#84cc16','#f97316','#a855f7','#14b8a6','#fb923c','#38bdf8'];
+
+async function searchTicker(rawSym) {
+  const sym = rawSym.trim().toUpperCase();
+  if (!sym) return;
+
+  const btn     = document.getElementById('searchBtn');
+  const results = document.getElementById('searchResults');
+  btn.disabled     = true;
+  btn.textContent  = '검색 중…';
+
+  // 기존 에러 메시지 제거
+  results.querySelectorAll('.search-error').forEach(el => el.remove());
+
+  try {
+    const res  = await fetch(`${API_BASE}/api/search?sym=${encodeURIComponent(sym)}`);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || '심볼을 찾을 수 없습니다');
+
+    const d      = json.data;
+    const market = d.isKR ? 'kr' : 'us';
+    const dec    = d.decimals;
+    const pct    = pctChange(d.current, d.prevClose);
+    const chg    = d.current - d.prevClose;
+    const up     = pct >= 0;
+    const dc     = dirCls(up, market);
+
+    // 기존 같은 심볼 카드 제거
+    if (searchCharts[sym]) { searchCharts[sym].destroy(); delete searchCharts[sym]; }
+    document.getElementById(`search-card-${sym}`)?.remove();
+
+    // 차트 라인 색상 배정 (고정 팔레트 순환)
+    if (!searchChartColors[sym]) {
+      searchChartColors[sym] = SEARCH_PALETTE[searchColorIdx++ % SEARCH_PALETTE.length];
+    }
+    const lineColor = searchChartColors[sym];
+
+    // 히스토리 데이터
+    const labels    = d.history.map(p => {
+      const dt = new Date(p.time);
+      return `${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+    });
+    const histVals  = d.history.map(p => p.value);
+
+    const flagCls = d.isKR ? 'flag-kr' : 'flag-us';
+    const flagTxt = d.isKR ? 'KR' : 'US';
+
+    // 카드 HTML
+    results.insertAdjacentHTML('afterbegin', `
+      <div class="chart-card" id="search-card-${sym}" style="position:relative">
+        <button class="chart-expand-btn search-expand-btn"
+                data-sym="${sym}" title="전체화면으로 확대" style="right:82px">⛶ 확대</button>
+        <button class="search-remove-btn" data-sym="${sym}" title="닫기">✕ 닫기</button>
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">
+              <span class="card-flag ${flagCls}" style="font-size:.58rem;padding:1px 5px;border-radius:3px;margin-right:6px;vertical-align:middle">${flagTxt}</span>
+              ${d.name || sym}
+            </div>
+            <div class="chart-subtitle">${d.exchange} · ${sym} · ${d.currency}</div>
+          </div>
+          <div class="chart-meta">
+            <div class="chart-current ${dc}">${fmt(d.current, dec)}</div>
+            <div class="chart-delta  ${dc}">${fmtPct(pct)}</div>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="search-chart-${sym}"></canvas>
+        </div>
+        <div class="chart-footer">
+          <div class="stat-item">
+            <div class="stat-label">시가</div>
+            <div class="stat-value">${fmt(d.open, dec)}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">고가</div>
+            <div class="stat-value ${upCls(market)}">${fmt(d.high, dec)}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">저가</div>
+            <div class="stat-value ${downCls(market)}">${fmt(d.low, dec)}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">전일대비</div>
+            <div class="stat-value ${dc}">${fmtChg(chg, dec)}</div>
+          </div>
+        </div>
+      </div>
+    `);
+
+    // 차트 생성
+    const canvas = document.getElementById(`search-chart-${sym}`);
+    searchCharts[sym] = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels:   labels,
+        datasets: [{
+          data:            histVals,
+          borderColor:     lineColor,
+          borderWidth:     2,
+          fill:            true,
+          backgroundColor: (ctx) => {
+            const { ctx: c, chartArea } = ctx.chart;
+            if (!chartArea) return 'transparent';
+            const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            g.addColorStop(0,  hexToRgba(lineColor, .25));
+            g.addColorStop(.6, hexToRgba(lineColor, .05));
+            g.addColorStop(1,  'transparent');
+            return g;
+          },
+          tension:     .4,
+          pointRadius: 0,
+          pointHoverRadius:          5,
+          pointHoverBackgroundColor: lineColor,
+          pointHoverBorderColor:     '#fff',
+          pointHoverBorderWidth:     2,
+        }],
+      },
+      options: {
+        responsive:          true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend:  { display: false },
+          tooltip: {
+            backgroundColor: '#1a2235', borderColor: '#1f2d45', borderWidth: 1,
+            titleColor: '#64748b', bodyColor: '#e2e8f0', padding: 10,
+            callbacks: { label: ctx => ` ${fmt(ctx.parsed.y, dec)}` },
+          },
+        },
+        scales: {
+          x: { display: false, grid: { display: false } },
+          y: {
+            position: 'right',
+            grid:     { color: 'rgba(31,45,69,.6)', drawBorder: false },
+            ticks:    { color: '#64748b', font: { size: 11 }, callback: v => fmt(v, dec) },
+          },
+        },
+        animation: { duration: 500 },
+      },
+    });
+
+    // 검색 상태 저장 (모달 확대용)
+    searchState[sym] = { ...d, market, dec, lineColor };
+
+    // 입력창 초기화
+    document.getElementById('searchInput').value = '';
+
+  } catch(e) {
+    results.insertAdjacentHTML('afterbegin', `
+      <div class="search-error">❌ <strong>"${sym}"</strong> — ${e.message}</div>
+    `);
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = '🔍 검색';
+  }
+}
+
+/* ── 검색 결과 모달 확대 ──────────────────────────────── */
+function openSearchModal(sym) {
+  const d = searchState[sym];
+  if (!d) return;
+
+  const dec   = d.dec;
+  const pct   = pctChange(d.current, d.prevClose);
+  const chg   = d.current - d.prevClose;
+  const up    = pct >= 0;
+  const dc    = dirCls(up, d.market);
+  const color = d.lineColor;
+
+  document.getElementById('modalTitle').textContent    = d.name || sym;
+  document.getElementById('modalSubtitle').textContent = `${d.exchange} · ${sym} · ${d.currency}`;
+
+  const priceEl = document.getElementById('modalPrice');
+  priceEl.textContent = fmt(d.current, dec);
+  priceEl.className   = `modal-price ${dc}`;
+
+  const deltaEl = document.getElementById('modalDelta');
+  deltaEl.textContent = `${fmtChg(chg, dec)}  (${fmtPct(pct)})`;
+  deltaEl.className   = `modal-delta ${dc}`;
+
+  document.getElementById('mOpen').textContent = fmt(d.open, dec);
+  const hEl = document.getElementById('mHigh');
+  hEl.textContent = fmt(d.high, dec); hEl.className = `stat-value ${upCls(d.market)}`;
+  const lEl = document.getElementById('mLow');
+  lEl.textContent = fmt(d.low, dec);  lEl.className = `stat-value ${downCls(d.market)}`;
+  const cEl = document.getElementById('mChg');
+  cEl.textContent = fmtChg(chg, dec); cEl.className = `stat-value ${dc}`;
+
+  if (modalChartInst) { modalChartInst.destroy(); modalChartInst = null; }
+
+  const labels   = d.history.map(p => {
+    const dt = new Date(p.time);
+    return `${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+  });
+  const histVals = d.history.map(p => p.value);
+
+  const canvas = document.getElementById('modalCanvas');
+  modalChartInst = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: histVals, borderColor: color, borderWidth: 2, fill: true,
+        backgroundColor: (ctx) => {
+          const { ctx: c, chartArea } = ctx.chart;
+          if (!chartArea) return 'transparent';
+          const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+          g.addColorStop(0, hexToRgba(color, .3)); g.addColorStop(.7, hexToRgba(color, .05)); g.addColorStop(1, 'transparent');
+          return g;
+        },
+        tension: .4, pointRadius: 0,
+        pointHoverRadius: 6, pointHoverBackgroundColor: color,
+        pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a2235', borderColor: '#1f2d45', borderWidth: 1,
+          titleColor: '#64748b', bodyColor: '#e2e8f0', padding: 12,
+          callbacks: { label: ctx => ` ${fmt(ctx.parsed.y, dec)}` },
+        },
+        zoom: {
+          zoom: { wheel: { enabled: true, speed: 0.08 }, pinch: { enabled: true }, mode: 'x' },
+          pan:  { enabled: true, mode: 'x', threshold: 5 },
+        },
+      },
+      scales: {
+        x: { display: true, grid: { color: 'rgba(31,45,69,.35)', drawBorder: false },
+             ticks: { color: '#64748b', font: { size: 11 }, maxRotation: 0, maxTicksLimit: 14 } },
+        y: { position: 'right', grid: { color: 'rgba(31,45,69,.5)', drawBorder: false },
+             ticks: { color: '#64748b', font: { size: 12 }, callback: v => fmt(v, dec) } },
+      },
+      animation: { duration: 350 },
+    },
+  });
+
+  canvas.ondblclick = () => modalChartInst?.resetZoom();
+  document.getElementById('expandModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+/* ── 검색 이벤트 바인딩 ───────────────────────────────── */
+document.getElementById('searchBtn').addEventListener('click', () => {
+  searchTicker(document.getElementById('searchInput').value);
+});
+document.getElementById('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') searchTicker(e.target.value);
+});
+
+// 검색 결과 카드: 닫기 / 확대 (이벤트 위임)
+document.getElementById('searchResults').addEventListener('click', e => {
+  const rm = e.target.closest('.search-remove-btn');
+  if (rm) {
+    const sym = rm.dataset.sym;
+    if (searchCharts[sym]) { searchCharts[sym].destroy(); delete searchCharts[sym]; }
+    delete searchState[sym];
+    document.getElementById(`search-card-${sym}`)?.remove();
+    return;
+  }
+  const exp = e.target.closest('.search-expand-btn');
+  if (exp) openSearchModal(exp.dataset.sym);
+});
+</script>
+</body>
+</html>
