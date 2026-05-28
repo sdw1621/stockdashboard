@@ -59,6 +59,30 @@ async function fetchYahoo(sym) {
   throw lastErr;
 }
 
+/* ── 급등·급락 로그 ─────────────────────────────────── */
+const SURGE_THRESHOLD = 1.5;        // % — 폰 알람 임계값
+const SURGE_COOL_MS   = 5 * 60_000; // 5분 쿨다운
+let surgeLog          = [];         // 미읽은 급등 이벤트
+let prevPriceMap      = {};         // id → 직전 가격
+let surgeCoolMap      = {};         // id → 마지막 알람 시각
+
+function detectSurge(id, name, newPrice) {
+  const prev = prevPriceMap[id];
+  prevPriceMap[id] = newPrice;
+  if (!prev || prev === newPrice) return;
+
+  const chgPct = ((newPrice - prev) / prev) * 100;
+  if (Math.abs(chgPct) < SURGE_THRESHOLD) return;
+
+  const now = Date.now();
+  if (surgeCoolMap[id] && now - surgeCoolMap[id] < SURGE_COOL_MS) return;
+  surgeCoolMap[id] = now;
+
+  const event = { id, name, price: newPrice, chgPct: +chgPct.toFixed(2), ts: now };
+  surgeLog.push(event);
+  console.log(`⚡  급${chgPct > 0 ? '등' : '락'} 감지: ${name} ${chgPct.toFixed(2)}%`);
+}
+
 /* ── Refresh all indices ───────────────────────────── */
 async function refreshAll() {
   const now = Date.now();
@@ -93,6 +117,7 @@ async function refreshAll() {
           history,
         };
 
+        detectSurge(id, name, meta.regularMarketPrice);   // ← 급등 감지
         console.log(`✅  ${name}: ${meta.regularMarketPrice.toFixed(2)}  (${history.length} pts)`);
       } catch (e) {
         console.error(`❌  ${name}: ${e.message}`);
@@ -105,6 +130,13 @@ async function refreshAll() {
   cacheTime = now;
   return cache;
 }
+
+/* ── 급등 이벤트 폴링 엔드포인트 ──────────────────────── */
+app.get('/api/surges', (req, res) => {
+  const events  = [...surgeLog];
+  surgeLog      = [];               // 읽은 후 클리어
+  res.json({ ok: true, surges: events });
+});
 
 /* ── Single-symbol search endpoint ────────────────── */
 app.get('/api/search', async (req, res) => {

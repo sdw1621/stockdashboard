@@ -775,6 +775,96 @@
       background: rgba(59,130,246,.07);
     }
     @media (max-width: 600px) { .rec-grid { grid-template-columns: 1fr; } }
+
+    /* ── 급등 Toast 알림 ─────────────────────────────────── */
+    #surgeToasts {
+      position: fixed; top: 76px; right: 18px;
+      z-index: 10000;
+      display: flex; flex-direction: column; gap: 10px;
+      max-width: 310px; pointer-events: none;
+    }
+    .s-toast {
+      background: #111827;
+      border: 1px solid var(--tc, #3b82f6);
+      border-radius: 14px;
+      padding: 13px 16px 10px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04);
+      display: flex; align-items: flex-start; gap: 11px;
+      position: relative; overflow: hidden;
+      pointer-events: all;
+      animation: stIn .4s cubic-bezier(.34,1.5,.64,1) both;
+    }
+    .s-toast.removing { animation: stOut .3s ease forwards; }
+    @keyframes stIn  { from { opacity:0; transform:translateX(110%); } to { opacity:1; transform:translateX(0); } }
+    @keyframes stOut { from { opacity:1; transform:translateX(0); }   to { opacity:0; transform:translateX(110%); } }
+    .s-toast::before {
+      content:''; position:absolute; top:0; left:0; right:0; height:2.5px;
+      background: var(--tc, #3b82f6);
+    }
+    .s-toast-icon  { font-size:1.55rem; flex-shrink:0; line-height:1; margin-top:1px; }
+    .s-toast-body  { flex:1; min-width:0; }
+    .s-toast-title { font-size:.83rem; font-weight:700; color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .s-toast-sub   { font-size:.71rem; color:#64748b; margin-top:2px; }
+    .s-toast-pct   { font-size:1.05rem; font-weight:700; color:var(--tc,#3b82f6); flex-shrink:0; margin-top:1px; }
+    .s-toast-x {
+      position:absolute; top:6px; right:8px;
+      background:none; border:none; color:#475569; cursor:pointer;
+      font-size:.75rem; padding:2px 4px; line-height:1;
+      transition: color .15s;
+    }
+    .s-toast-x:hover { color:#e2e8f0; }
+    .s-toast-bar {
+      position:absolute; bottom:0; left:0; height:2px;
+      background:var(--tc,#3b82f6); opacity:.5;
+      animation: stBar var(--dur,8s) linear forwards;
+    }
+    @keyframes stBar { from { width:100%; } to { width:0%; } }
+
+    /* 급등 알림 설정 버튼 */
+    .surge-cfg-btn {
+      position:fixed; bottom:22px; right:22px; z-index:9990;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:50%; width:44px; height:44px;
+      display:flex; align-items:center; justify-content:center;
+      cursor:pointer; font-size:1.1rem;
+      box-shadow:0 4px 16px rgba(0,0,0,.4);
+      transition:transform .2s, box-shadow .2s;
+    }
+    .surge-cfg-btn:hover { transform:scale(1.1); box-shadow:0 6px 20px rgba(0,0,0,.5); }
+
+    /* 설정 패널 */
+    .surge-panel {
+      position:fixed; bottom:74px; right:22px; z-index:9991;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:16px; padding:18px 20px;
+      box-shadow:0 8px 32px rgba(0,0,0,.5);
+      min-width:260px; display:none;
+    }
+    .surge-panel.open { display:block; }
+    .surge-panel h4 { font-size:.85rem; margin-bottom:14px; color:var(--text); }
+    .surge-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+    .surge-label { font-size:.78rem; color:#94a3b8; }
+    .surge-val   { font-size:.78rem; font-weight:700; color:var(--accent); min-width:40px; text-align:right; }
+    .surge-slider { width:110px; accent-color:var(--accent); }
+    .surge-toggle {
+      width:38px; height:20px; border-radius:10px;
+      background:var(--border); position:relative; cursor:pointer;
+      border:none; transition:background .2s; flex-shrink:0;
+    }
+    .surge-toggle.on { background:var(--accent); }
+    .surge-toggle::after {
+      content:''; position:absolute; top:3px; left:3px;
+      width:14px; height:14px; border-radius:50%;
+      background:#fff; transition:left .2s;
+    }
+    .surge-toggle.on::after { left:21px; }
+    .surge-divider { border:none; border-top:1px solid var(--border); margin:12px 0; }
+    .surge-test-btn {
+      width:100%; padding:7px; border-radius:8px; font-size:.78rem;
+      background:rgba(59,130,246,.12); border:1px solid rgba(59,130,246,.3);
+      color:var(--accent); cursor:pointer; transition:background .15s; font-family:inherit;
+    }
+    .surge-test-btn:hover { background:rgba(59,130,246,.22); }
   </style>
 </head>
 <body>
@@ -864,6 +954,32 @@
     </div>
   </div>
 </main>
+
+<!-- ── 급등 Toast 컨테이너 ── -->
+<div id="surgeToasts"></div>
+
+<!-- ── 알림 설정 플로팅 버튼 ── -->
+<button class="surge-cfg-btn" id="surgeCfgBtn" title="급등 알림 설정">🔔</button>
+<div class="surge-panel" id="surgePanel">
+  <h4>⚡ 급등·급락 알림 설정</h4>
+  <div class="surge-row">
+    <span class="surge-label">팝업 알림</span>
+    <button class="surge-toggle on" id="togPopup"></button>
+  </div>
+  <div class="surge-row">
+    <span class="surge-label">임계값</span>
+    <div style="display:flex;align-items:center;gap:8px">
+      <input type="range" class="surge-slider" id="surgeThresh" min="0.5" max="5" step="0.5" value="1.5" />
+      <span class="surge-val" id="surgeThreshVal">±1.5%</span>
+    </div>
+  </div>
+  <div class="surge-row">
+    <span class="surge-label">소리 알림</span>
+    <button class="surge-toggle" id="togSound"></button>
+  </div>
+  <hr class="surge-divider" />
+  <button class="surge-test-btn" id="surgeTestBtn">🧪 테스트 알림 보기</button>
+</div>
 
 <!-- ── Expand Modal ── -->
 <div id="expandModal" class="modal-overlay" style="display:none">
@@ -1422,6 +1538,7 @@ async function fetchData() {
       chartsReady = true;
     } else {
       updateAllDisplays();
+      checkSurges(data);   // ← 급등·급락 감지 (첫 로드 후부터)
     }
 
     setStatus('ok');
@@ -2059,6 +2176,143 @@ document.getElementById('expandModal').addEventListener('click', e => {
   if (e.target === document.getElementById('expandModal')) closeModal();
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+/* ════════════════════════════════════════════════════════
+   SURGE DETECTION — 급등·급락 감지 + 팝업 알림
+════════════════════════════════════════════════════════ */
+const _prevPrices    = {};      // id → last known price
+const _surgeCooldown = {};      // id → last alert timestamp
+const COOLDOWN_MS    = 4 * 60 * 1000;  // 4분 쿨다운
+
+// 설정값 (슬라이더/토글로 동적 변경)
+const surgeSettings = {
+  popupOn   : true,
+  soundOn   : false,
+  threshold : 1.5,          // % 기본값
+};
+
+/* ── 급등 감지 ─────────────────────────────────────────── */
+function checkSurges(data) {
+  if (!surgeSettings.popupOn) return;
+  const now = Date.now();
+
+  INDICES.forEach(cfg => {
+    const d = data[cfg.id];
+    if (!d || !d.current) return;
+
+    const prev = _prevPrices[cfg.id];
+    _prevPrices[cfg.id] = d.current;
+
+    if (!prev || prev === d.current) return;
+
+    const chgPct = ((d.current - prev) / prev) * 100;
+    if (Math.abs(chgPct) < surgeSettings.threshold) return;
+
+    // 쿨다운 체크
+    if (_surgeCooldown[cfg.id] && now - _surgeCooldown[cfg.id] < COOLDOWN_MS) return;
+    _surgeCooldown[cfg.id] = now;
+
+    showSurgeToast(cfg, d.current, chgPct);
+  });
+}
+
+/* ── 토스트 표시 ───────────────────────────────────────── */
+function showSurgeToast(cfg, price, chgPct, forceDur) {
+  const isUp   = chgPct > 0;
+  const isKR   = cfg.market === 'kr';
+  const color  = isUp
+    ? (isKR ? '#ef4444' : '#22c55e')
+    : (isKR ? '#3b82f6' : '#ef4444');
+  const icon   = isUp ? '🚀' : '📉';
+  const label  = isUp ? '급등' : '급락';
+  const pctStr = (isUp ? '+' : '') + chgPct.toFixed(2) + '%';
+  const priceStr = isKR
+    ? Math.round(price).toLocaleString('ko-KR') + '원'
+    : '$' + price.toFixed(2);
+  const dur = forceDur || 8;
+
+  const t = document.createElement('div');
+  t.className = 'surge-toast';
+  t.style.setProperty('--tc', color);
+  t.style.setProperty('--dur', dur + 's');
+  t.innerHTML = `
+    <div class="s-toast-icon">${icon}</div>
+    <div class="s-toast-body">
+      <div class="s-toast-title">${cfg.name} ${label} 감지!</div>
+      <div class="s-toast-sub">${priceStr} · 15초 전 대비</div>
+    </div>
+    <div class="s-toast-pct">${pctStr}</div>
+    <button class="s-toast-x" onclick="dismissToast(this.parentElement)">✕</button>
+    <div class="s-toast-bar"></div>
+  `;
+  document.getElementById('surgeToasts').prepend(t);
+
+  if (surgeSettings.soundOn) playBeep(isUp);
+
+  setTimeout(() => dismissToast(t), dur * 1000);
+}
+
+function dismissToast(el) {
+  if (!el || !el.parentElement) return;
+  el.classList.add('removing');
+  setTimeout(() => el.remove(), 300);
+}
+
+/* ── 알림음 (AudioContext, 외부 파일 불필요) ─────────────── */
+function playBeep(isUp) {
+  try {
+    const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = isUp ? 880 : 440;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(.18, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + .4);
+    osc.start(); osc.stop(ctx.currentTime + .4);
+  } catch (_) {}
+}
+
+/* ── 설정 패널 이벤트 ──────────────────────────────────── */
+document.getElementById('surgeCfgBtn').addEventListener('click', () => {
+  document.getElementById('surgePanel').classList.toggle('open');
+});
+document.addEventListener('click', e => {
+  const panel = document.getElementById('surgePanel');
+  const btn   = document.getElementById('surgeCfgBtn');
+  if (!panel.contains(e.target) && e.target !== btn) panel.classList.remove('open');
+});
+
+const togPopup = document.getElementById('togPopup');
+const togSound = document.getElementById('togSound');
+const sliderEl = document.getElementById('surgeThresh');
+const sliderLb = document.getElementById('surgeThreshVal');
+
+togPopup.addEventListener('click', () => {
+  surgeSettings.popupOn = !surgeSettings.popupOn;
+  togPopup.classList.toggle('on', surgeSettings.popupOn);
+});
+togSound.addEventListener('click', () => {
+  surgeSettings.soundOn = !surgeSettings.soundOn;
+  togSound.classList.toggle('on', surgeSettings.soundOn);
+});
+sliderEl.addEventListener('input', () => {
+  surgeSettings.threshold = parseFloat(sliderEl.value);
+  sliderLb.textContent = `±${sliderEl.value}%`;
+});
+
+// 테스트 버튼
+document.getElementById('surgeTestBtn').addEventListener('click', () => {
+  showSurgeToast(
+    { name: 'SK하이닉스', market: 'kr', id: '_test' },
+    285500, 2.38, 6
+  );
+  showSurgeToast(
+    { name: 'NVIDIA', market: 'us', id: '_test2' },
+    138.72, -1.85, 6
+  );
+  document.getElementById('surgePanel').classList.remove('open');
+});
 
 /* ════════════════════════════════════════════════════════
    INIT
