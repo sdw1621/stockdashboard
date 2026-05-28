@@ -679,6 +679,102 @@
       margin-left: 8px;
     }
     .reset-zoom-btn:hover { background: rgba(59,130,246,.25); }
+
+    /* ── 종목 추천 섹션 ──────────────────────────────────── */
+    .rec-filter {
+      display: flex; gap: 8px; margin: 14px 0 16px; flex-wrap: wrap;
+    }
+    .rec-filter-btn {
+      padding: 5px 14px; border-radius: 20px; font-size: .78rem;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); cursor: pointer; transition: all .15s; font-family: inherit;
+    }
+    .rec-filter-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(59,130,246,.08); }
+    .rec-filter-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(59,130,246,.12); font-weight: 600; }
+
+    .rec-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+      gap: 14px; margin-bottom: 36px;
+    }
+    .rec-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 18px 20px;
+      position: relative; overflow: hidden;
+      transition: transform .2s, box-shadow .2s, border-color .2s;
+      cursor: default;
+    }
+    .rec-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: var(--rc, var(--accent)); border-radius: 16px 16px 0 0;
+    }
+    .rec-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 28px rgba(0,0,0,.35);
+      border-color: var(--rc, var(--accent));
+    }
+    .rec-top {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 8px; margin-bottom: 10px;
+    }
+    .rec-meta  { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .rec-flag  { font-size: .95rem; line-height: 1; }
+    .rec-sector {
+      font-size: .67rem; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 2px 7px; color: var(--muted);
+    }
+    .rec-badge {
+      font-size: .68rem; font-weight: 700; padding: 3px 10px;
+      border-radius: 20px; white-space: nowrap; letter-spacing: .02em; flex-shrink: 0;
+    }
+    .rec-badge.sb { background:rgba(59,130,246,.18);  color:#60a5fa; border:1px solid rgba(59,130,246,.35); }
+    .rec-badge.b  { background:rgba(99,102,241,.18);  color:#818cf8; border:1px solid rgba(99,102,241,.35); }
+    .rec-badge.n  { background:rgba(100,116,139,.15); color:#94a3b8; border:1px solid rgba(100,116,139,.3); }
+    .rec-badge.s  { background:rgba(239,68,68,.15);   color:#f87171; border:1px solid rgba(239,68,68,.3); }
+
+    .rec-name   { font-size: 1rem; font-weight: 700; color: var(--text); line-height: 1.2; }
+    .rec-ticker { font-size: .7rem; color: var(--muted); font-family: 'Consolas', monospace; margin-top: 2px; }
+
+    .rec-price-box {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface2); border-radius: 10px;
+      padding: 9px 13px; margin: 11px 0 10px;
+    }
+    .rec-tgt-label { font-size: .63rem; color: var(--muted); line-height: 1.3; }
+    .rec-tgt-val   { font-size: .98rem; font-weight: 700; color: var(--text); }
+    .rec-upside    { margin-left: auto; font-size: .82rem; font-weight: 700; color: var(--rc, var(--accent)); }
+
+    .rec-bullets { list-style: none; display: flex; flex-direction: column; gap: 5px; margin: 0 0 12px; }
+    .rec-bullets li {
+      font-size: .76rem; color: #94a3b8; padding-left: 14px;
+      position: relative; line-height: 1.45;
+    }
+    .rec-bullets li::before {
+      content: '▸'; position: absolute; left: 0;
+      color: var(--rc, var(--accent)); font-size: .65rem; top: 2px;
+    }
+    .rec-foot {
+      display: flex; align-items: center; justify-content: space-between;
+      padding-top: 10px; border-top: 1px solid var(--border);
+    }
+    .rec-risk-wrap { display: flex; flex-direction: column; gap: 4px; }
+    .rec-risk-label { font-size: .63rem; color: var(--muted); }
+    .rec-risk-dots  { display: flex; gap: 4px; }
+    .rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+    .rec-dot.on { background: var(--rc, var(--accent)); }
+
+    .rec-lookup {
+      font-size: .72rem; padding: 5px 12px;
+      border: 1px solid var(--border); border-radius: 8px;
+      background: transparent; color: var(--muted);
+      cursor: pointer; transition: all .15s; font-family: inherit;
+    }
+    .rec-lookup:hover {
+      border-color: var(--rc, var(--accent)); color: var(--rc, var(--accent));
+      background: rgba(59,130,246,.07);
+    }
+    @media (max-width: 600px) { .rec-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -734,6 +830,21 @@
     </div>
     <div id="searchResults" class="search-results"></div>
   </div>
+
+  <!-- ── 종목 추천 섹션 ── -->
+  <div class="section-title" style="margin-top:36px">
+    💡 종목 추천
+    <span style="font-size:.68rem;color:var(--muted);font-weight:400;letter-spacing:0;text-transform:none;margin-left:10px">
+      애널리스트 컨센서스 기준 · 투자 참고용
+    </span>
+  </div>
+  <div class="rec-filter" id="recFilter">
+    <button class="rec-filter-btn active" data-f="all">전체</button>
+    <button class="rec-filter-btn" data-f="kr">🇰🇷 국내</button>
+    <button class="rec-filter-btn" data-f="us">🇺🇸 해외</button>
+    <button class="rec-filter-btn" data-f="strong-buy">⭐ 강력매수</button>
+  </div>
+  <div class="rec-grid" id="recGrid"></div>
 
   <!-- ── Widget Row ── -->
   <div class="widget-row">
@@ -1516,6 +1627,147 @@ const NEWS = [
   },
 ];
 
+/* ════════════════════════════════════════════════════════
+   RECOMMENDATIONS  (애널리스트 컨센서스 기반 · 참고용)
+════════════════════════════════════════════════════════ */
+const RECS = [
+  {
+    ticker: '000660.KS', name: 'SK하이닉스', market: 'kr', flag: '🇰🇷', sector: '반도체',
+    rating: 'sb', ratingLabel: '강력매수',
+    color: '#3b82f6',
+    targetPrice: 350000, currentPrice: 284000, currency: 'KRW', decimals: 0,
+    risk: 2, riskLabel: '중간',
+    points: [
+      'HBM3E 독점 공급 — NVIDIA Blackwell 핵심 파트너',
+      'AI 서버 수요 급증, 2025년 영업이익 10조+ 전망',
+    ],
+  },
+  {
+    ticker: '005930.KS', name: '삼성전자', market: 'kr', flag: '🇰🇷', sector: '반도체/파운드리',
+    rating: 'b', ratingLabel: '매수',
+    color: '#6366f1',
+    targetPrice: 85000, currentPrice: 65200, currency: 'KRW', decimals: 0,
+    risk: 1, riskLabel: '낮음',
+    points: [
+      '테슬라 AI6 파운드리 165억달러 수주 — 파운드리 회복 신호',
+      'HBM4 양산 임박, 반도체 부문 실적 개선 구간 진입',
+    ],
+  },
+  {
+    ticker: 'NVDA', name: 'NVIDIA', market: 'us', flag: '🇺🇸', sector: 'AI·GPU',
+    rating: 'sb', ratingLabel: '강력매수',
+    color: '#22c55e',
+    targetPrice: 200, currentPrice: 135.5, currency: 'USD', decimals: 2,
+    risk: 2, riskLabel: '중간',
+    points: [
+      'Blackwell 아키텍처 수요 공급 초과 — 데이터센터 매출 폭발',
+      'AI 가속기 시장 점유율 80%+ 압도적 유지',
+    ],
+  },
+  {
+    ticker: 'TSM', name: 'TSMC', market: 'us', flag: '🇺🇸', sector: '파운드리',
+    rating: 'sb', ratingLabel: '강력매수',
+    color: '#f59e0b',
+    targetPrice: 260, currentPrice: 195, currency: 'USD', decimals: 2,
+    risk: 1, riskLabel: '낮음',
+    points: [
+      'CoWoS 패키징 독점 — AI 반도체 전량 위탁 생산 수혜',
+      '2nm 공정 양산 개시, 기술 격차 2년 이상 유지',
+    ],
+  },
+  {
+    ticker: '066570.KS', name: 'LG전자', market: 'kr', flag: '🇰🇷', sector: '가전·전장',
+    rating: 'b', ratingLabel: '매수',
+    color: '#8b5cf6',
+    targetPrice: 130000, currentPrice: 107000, currency: 'KRW', decimals: 0,
+    risk: 1, riskLabel: '낮음',
+    points: [
+      '1Q 어닝서프라이즈 — 전장(VS)·HVAC B2B 고마진 성장 지속',
+      '1,000억 자사주 매입 집행 중, 주주환원 강화',
+    ],
+  },
+  {
+    ticker: 'TSLA', name: 'Tesla', market: 'us', flag: '🇺🇸', sector: '전기차·AI',
+    rating: 'n', ratingLabel: '중립',
+    color: '#64748b',
+    targetPrice: 300, currentPrice: 285, currency: 'USD', decimals: 2,
+    risk: 3, riskLabel: '높음',
+    points: [
+      'FSD 글로벌 확장 긍정적, 단기 밸류에이션 부담 상존',
+      '로보택시 상용화 일정 지연 리스크 주의',
+    ],
+  },
+];
+
+let _recFilter = 'all';
+
+function buildRecommendations() {
+  const grid = document.getElementById('recGrid');
+  const filtered = RECS.filter(r => {
+    if (_recFilter === 'kr') return r.market === 'kr';
+    if (_recFilter === 'us') return r.market === 'us';
+    if (_recFilter === 'strong-buy') return r.rating === 'sb';
+    return true;
+  });
+
+  const fmtPrice = r => {
+    const sym = r.currency === 'KRW' ? '₩' : '$';
+    return sym + r.targetPrice.toLocaleString('ko-KR',
+      { minimumFractionDigits: r.decimals, maximumFractionDigits: r.decimals });
+  };
+  const fmtUpside = r => {
+    const pct = ((r.targetPrice - r.currentPrice) / r.currentPrice * 100).toFixed(1);
+    return (pct > 0 ? '+' : '') + pct + '%';
+  };
+  const dots = r => [1,2,3].map(i =>
+    `<span class="rec-dot ${i <= r.risk ? 'on' : ''}"></span>`
+  ).join('');
+  const badgeCls = r => r.rating;  // sb / b / n / s
+
+  grid.innerHTML = filtered.length ? filtered.map(r => `
+    <div class="rec-card" style="--rc:${r.color}">
+      <div class="rec-top">
+        <div class="rec-meta">
+          <span class="rec-flag">${r.flag}</span>
+          <span class="rec-sector">${r.sector}</span>
+        </div>
+        <span class="rec-badge ${badgeCls(r)}">${r.ratingLabel}</span>
+      </div>
+      <div class="rec-name">${r.name}</div>
+      <div class="rec-ticker">${r.ticker}</div>
+      <div class="rec-price-box">
+        <div>
+          <div class="rec-tgt-label">목표주가</div>
+          <div class="rec-tgt-val">${fmtPrice(r)}</div>
+        </div>
+        <div class="rec-upside">${fmtUpside(r)} ↑</div>
+      </div>
+      <ul class="rec-bullets">
+        ${r.points.map(p => `<li>${p}</li>`).join('')}
+      </ul>
+      <div class="rec-foot">
+        <div class="rec-risk-wrap">
+          <div class="rec-risk-label">리스크 · ${r.riskLabel}</div>
+          <div class="rec-risk-dots">${dots(r)}</div>
+        </div>
+        <button class="rec-lookup" onclick="searchTicker('${r.ticker}');document.getElementById('searchInput').scrollIntoView({behavior:'smooth'})">
+          📊 차트 보기
+        </button>
+      </div>
+    </div>
+  `).join('') : `<div style="color:var(--muted);font-size:.85rem;padding:24px 0">해당 필터에 종목이 없습니다.</div>`;
+}
+
+// 필터 버튼 이벤트
+document.getElementById('recFilter').addEventListener('click', e => {
+  const btn = e.target.closest('.rec-filter-btn');
+  if (!btn) return;
+  document.querySelectorAll('.rec-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  _recFilter = btn.dataset.f;
+  buildRecommendations();
+});
+
 function buildNews() {
   const feed = document.getElementById('newsFeed');
   // 우선순위 정렬 (priority 낮을수록 상위)
@@ -1742,6 +1994,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 /* ════════════════════════════════════════════════════════
    INIT
 ════════════════════════════════════════════════════════ */
+buildRecommendations();
 buildNews();
 buildHeatmap();
 
