@@ -28,7 +28,7 @@ let cacheTime = 0;
 const TTL     = 15_000;
 
 /* ── Yahoo Finance fetcher ─────────────────────────── */
-async function fetchYahoo(sym) {
+async function fetchYahoo(sym, range = '1d', interval = '2m') {
   const hosts = ['query1', 'query2'];
   let lastErr;
   for (const host of hosts) {
@@ -36,7 +36,7 @@ async function fetchYahoo(sym) {
       const url =
         `https://${host}.finance.yahoo.com/v8/finance/chart/` +
         `${encodeURIComponent(sym)}` +
-        `?range=1d&interval=2m&includePrePost=false&events=div%2Csplit`;
+        `?range=${range}&interval=${interval}&includePrePost=false&events=div%2Csplit`;
 
       const { data } = await axios.get(url, {
         headers: {
@@ -136,6 +136,54 @@ app.get('/api/surges', (req, res) => {
   const events  = [...surgeLog];
   surgeLog      = [];               // 읽은 후 클리어
   res.json({ ok: true, surges: events });
+});
+
+/* ── 히스토리 엔드포인트 ────────────────────────────── */
+const RANGE_MAP = {
+  '1d' : { range: '1d',  interval: '2m'  },
+  '5d' : { range: '5d',  interval: '15m' },
+  '1mo': { range: '1mo', interval: '60m' },
+  '1y' : { range: '1y',  interval: '1d'  },
+  '5y' : { range: '5y',  interval: '1wk' },
+};
+
+app.get('/api/history', async (req, res) => {
+  const sym   = (req.query.sym   || '').trim();
+  const range = (req.query.range || '1d').trim();
+  if (!sym)            return res.status(400).json({ ok: false, error: 'sym 필요' });
+  if (!RANGE_MAP[range]) return res.status(400).json({ ok: false, error: '잘못된 range' });
+
+  const { range: r, interval: iv } = RANGE_MAP[range];
+  try {
+    const raw    = await fetchYahoo(sym, r, iv);
+    const result = raw?.chart?.result?.[0];
+    if (!result) throw new Error('데이터 없음');
+
+    const meta = result.meta;
+    const q    = result.indicators?.quote?.[0] ?? {};
+    const ts   = result.timestamp ?? [];
+
+    const history = ts
+      .map((t, i) => ({
+        time : t * 1000,
+        value: q.close?.[i] ?? q.open?.[i] ?? null,
+      }))
+      .filter(p => p.value !== null && !Number.isNaN(p.value));
+
+    res.json({
+      ok: true,
+      data: {
+        sym, range,
+        current : meta.regularMarketPrice,
+        prevClose: meta.chartPreviousClose ?? meta.previousClose,
+        history,
+      },
+    });
+    console.log(`📊  히스토리: ${sym} [${range}] → ${history.length}pts`);
+  } catch (e) {
+    console.warn(`📊  히스토리 실패: ${sym} [${range}] → ${e.message}`);
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 /* ── Single-symbol search endpoint ────────────────── */

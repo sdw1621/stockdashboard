@@ -948,6 +948,31 @@
   .chart-current { font-size: 1.1rem !important; }
   .cards-grid { grid-template-columns: repeat(2, 1fr); }
 }
+    /* ── 범위 버튼 ──────────────────────────────────────── */
+    .range-row {
+      display: flex; gap: 4px;
+      margin-bottom: 14px;
+    }
+    .range-btn {
+      font-size: .65rem; font-weight: 600;
+      padding: 3px 9px; border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent; color: var(--muted);
+      cursor: pointer; transition: all .15s; font-family: inherit;
+      letter-spacing: .02em;
+    }
+    .range-btn:hover:not(.active) {
+      border-color: #2a3d56; color: var(--text);
+      background: var(--surface2);
+    }
+    .range-btn.active {
+      background: rgba(59,130,246,.14);
+      color: var(--accent);
+      border-color: rgba(59,130,246,.35);
+    }
+    .range-loading {
+      opacity: .4; pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -1185,10 +1210,10 @@ if (location.protocol === 'file:') {
    CONFIG
 ════════════════════════════════════════════════════════ */
 const INDICES = [
-  { id:'kospi',   name:'KOSPI',    full:'코스피',  region:'한국 종합주가지수',  flag:'flag-kr', flagTxt:'KR', color:'#3b82f6', decimals:2, market:'kr' },
-  { id:'samsung', name:'삼성전자', full:'삼성전자', region:'KRX · 005930',      flag:'flag-kr', flagTxt:'KR', color:'#8b5cf6', decimals:0, market:'kr' },
-  { id:'lg',      name:'LG전자',   full:'LG전자',  region:'KRX · 066570',      flag:'flag-kr', flagTxt:'KR', color:'#22c55e', decimals:0, market:'kr' },
-  { id:'tesla',   name:'Tesla',    full:'테슬라',  region:'NASDAQ · TSLA',     flag:'flag-us', flagTxt:'US', color:'#f59e0b', decimals:2, market:'us' },
+  { id:'kospi',   sym:'^KS11',      name:'KOSPI',    full:'코스피',  region:'한국 종합주가지수',  flag:'flag-kr', flagTxt:'KR', color:'#3b82f6', decimals:2, market:'kr' },
+  { id:'samsung', sym:'005930.KS',  name:'삼성전자', full:'삼성전자', region:'KRX · 005930',      flag:'flag-kr', flagTxt:'KR', color:'#8b5cf6', decimals:0, market:'kr' },
+  { id:'lg',      sym:'066570.KS',  name:'LG전자',   full:'LG전자',  region:'KRX · 066570',      flag:'flag-kr', flagTxt:'KR', color:'#22c55e', decimals:0, market:'kr' },
+  { id:'tesla',   sym:'TSLA',       name:'Tesla',    full:'테슬라',  region:'NASDAQ · TSLA',     flag:'flag-us', flagTxt:'US', color:'#f59e0b', decimals:2, market:'us' },
 ];
 
 // ID → idx 빠른 조회 맵
@@ -1466,7 +1491,7 @@ const mainCharts = {};
 function buildCharts() {
   const grid = document.getElementById('chartsGrid');
   grid.innerHTML = '';
-  INDICES.forEach(idx => {
+  INDICES.forEach((idx, numIdx) => {
     const s   = state[idx.id];
     const pct = pctChange(s.current, s.prevClose);
     const up  = pct >= 0;
@@ -1485,6 +1510,13 @@ function buildCharts() {
             <div class="chart-current ${dc}" id="mc-${idx.id}">${fmt(s.current, dec)}</div>
             <div class="chart-delta  ${dc}" id="md-${idx.id}">${fmtPct(pct)}</div>
           </div>
+        </div>
+        <div class="range-row" data-chartid="${idx.id}">
+          <button class="range-btn active" data-range="1d">1일</button>
+          <button class="range-btn" data-range="5d">1주</button>
+          <button class="range-btn" data-range="1mo">1달</button>
+          <button class="range-btn" data-range="1y">1년</button>
+          <button class="range-btn" data-range="5y">5년</button>
         </div>
         <div class="chart-wrap">
           <canvas id="chart-${idx.id}"></canvas>
@@ -2447,6 +2479,94 @@ document.getElementById('themeBtn').addEventListener('click', () => {
   const t = document.documentElement.dataset.theme;
   document.getElementById('themeBtn').textContent = t === 'dark' ? '☀️' : '🌙';
 })();
+
+/* ════════════════════════════════════════════════════════
+   RANGE BUTTONS — 시간 범위 선택
+════════════════════════════════════════════════════════ */
+const _chartRange = {};   // id → 현재 range
+
+// 라벨 포맷 (range에 따라)
+function fmtLabel(ts, range) {
+  const d = new Date(ts);
+  if (range === '1d') {
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }
+  if (range === '5d') {
+    return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }
+  if (range === '1mo') {
+    return `${d.getMonth()+1}/${d.getDate()}`;
+  }
+  // 1y, 5y
+  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+async function setChartRange(id, range) {
+  const cfg = IDX_MAP[id];
+  if (!cfg) return;
+
+  _chartRange[id] = range;
+
+  // 버튼 상태 업데이트
+  const row = document.querySelector(`.range-row[data-chartid="${id}"]`);
+  if (row) {
+    row.classList.add('range-loading');
+    row.querySelectorAll('.range-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.range === range);
+    });
+  }
+
+  try {
+    const res  = await fetch(`${API_BASE}/api/history?sym=${encodeURIComponent(cfg.sym || cfg.id)}&range=${range}`);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error);
+
+    const history = json.data.history;
+    const ch = mainCharts[id];
+    if (!ch) return;
+
+    ch.data.labels   = history.map(p => fmtLabel(p.time, range));
+    ch.data.datasets[0].data = history.map(p => p.value);
+
+    // x축 표시 여부 및 라벨 밀도 조절
+    ch.options.scales.x.display = true;
+    ch.options.scales.x.ticks = ch.options.scales.x.ticks || {};
+    ch.options.scales.x.ticks.color = '#64748b';
+    ch.options.scales.x.ticks.font  = { size: 10 };
+    ch.options.scales.x.ticks.maxRotation = 0;
+    const maxTicks = range === '1d' ? 8 : range === '5d' ? 10 : 8;
+    ch.options.scales.x.ticks.maxTicksLimit = maxTicks;
+
+    // 차트 색상 업데이트 (up/down 방향)
+    const first = history[0]?.value ?? 0;
+    const last  = history[history.length - 1]?.value ?? 0;
+    const isUp  = last >= first;
+    const market = cfg.market || 'us';
+    const lineColor = isUp ? upHex(market) : downHex(market);
+    ch.data.datasets[0].borderColor          = lineColor;
+    ch.data.datasets[0].pointBackgroundColor = lineColor;
+    if (typeof ch.data.datasets[0].backgroundColor !== 'function') {
+      ch.data.datasets[0].backgroundColor = lineColor + '22';
+    }
+
+    ch.update('active');
+  } catch (e) {
+    console.warn(`range fetch error [${id}] ${range}:`, e.message);
+  } finally {
+    if (row) row.classList.remove('range-loading');
+  }
+}
+
+// 이벤트 위임: 범위 버튼 클릭 (chartsGrid 내)
+document.getElementById('chartsGrid').addEventListener('click', e => {
+  const btn = e.target.closest('.range-btn');
+  if (!btn) return;
+  const row = btn.closest('.range-row');
+  if (!row) return;
+  const id    = row.dataset.chartid;
+  const range = btn.dataset.range;
+  if (id && range) setChartRange(id, range);
+});
 
 buildRecommendations();
 buildNews();
