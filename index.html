@@ -971,8 +971,26 @@
       border-color: rgba(59,130,246,.35);
     }
     .range-loading {
-      opacity: .4; pointer-events: none;
+      opacity: .55; pointer-events: none;
     }
+    /* ── 차트 로딩 오버레이 ────────────────────────────── */
+    .chart-loading {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(13,17,23,.5);
+      border-radius: 12px; z-index: 20;
+      opacity: 0; pointer-events: none;
+      transition: opacity .12s;
+    }
+    .chart-loading.visible { opacity: 1; pointer-events: all; }
+    .chart-loading-spin {
+      width: 26px; height: 26px;
+      border: 2px solid rgba(59,130,246,.25);
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    [data-theme="light"] .chart-loading { background: rgba(240,244,248,.6); }
   </style>
 </head>
 <body>
@@ -2484,9 +2502,11 @@ document.getElementById('themeBtn').addEventListener('click', () => {
 /* ════════════════════════════════════════════════════════
    RANGE BUTTONS — 시간 범위 선택
 ════════════════════════════════════════════════════════ */
-const _chartRange = {};   // id → 현재 range
+const _chartRange = {};              // id → 현재 range
+const _rangeCache = {};              // 'id-range' → {labels, values, ts}
+const RANGE_CACHE_TTL = 5 * 60_000; // 5분 캐시
 
-// 라벨 포맷 (range에 따라)
+/* ── 라벨 포맷 (range에 따라) ───────────────────────── */
 function fmtLabel(ts, range) {
   const d = new Date(ts);
   if (range === '1d') {
@@ -2498,80 +2518,114 @@ function fmtLabel(ts, range) {
   if (range === '1mo') {
     return `${d.getMonth()+1}/${d.getDate()}`;
   }
-  // 1y, 5y
   return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`;
 }
 
+/* ── 차트 로딩 오버레이 토글 ────────────────────────── */
+function showChartLoading(id, show) {
+  const canvas = document.getElementById(`chart-${id}`);
+  if (!canvas) return;
+  const wrap = canvas.closest('.chart-wrap');
+  if (!wrap) return;
+  let ov = wrap.querySelector('.chart-loading');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.className = 'chart-loading';
+    ov.innerHTML = '<div class="chart-loading-spin"></div>';
+    wrap.appendChild(ov);
+  }
+  ov.classList.toggle('visible', show);
+}
+
+/* ── 차트에 데이터 + 색상 적용 (공통) ──────────────── */
+function applyChartData(ch, cfg, labels, values, range) {
+  ch.data.labels           = labels;
+  ch.data.datasets[0].data = values;
+
+  const showX = range !== '1d';
+  ch.options.scales.x.display = showX;
+  if (showX) {
+    ch.options.scales.x.ticks = ch.options.scales.x.ticks || {};
+    ch.options.scales.x.ticks.color       = '#64748b';
+    ch.options.scales.x.ticks.font        = { size: 10 };
+    ch.options.scales.x.ticks.maxRotation = 0;
+    ch.options.scales.x.ticks.maxTicksLimit = range === '5d' ? 10 : 8;
+  }
+
+  const first = values[0] ?? 0;
+  const last  = values[values.length - 1] ?? 0;
+  const isUp  = last >= first;
+  const market = cfg.market || 'us';
+  const lineColor = isUp ? upHex(market) : downHex(market);
+  ch.data.datasets[0].borderColor     = lineColor;
+  ch.data.datasets[0].backgroundColor = hexToRgba(lineColor, .15);
+
+  ch.update('active');
+}
+
+/* ── 범위 버튼 클릭 핸들러 ──────────────────────────── */
 async function setChartRange(id, range) {
   const cfg = IDX_MAP[id];
   if (!cfg) return;
 
   _chartRange[id] = range;
 
-  // 버튼 상태 업데이트
+  // ① 버튼 즉시 활성화 (fetch 완료를 기다리지 않음)
   const row = document.querySelector(`.range-row[data-chartid="${id}"]`);
   if (row) {
-    row.classList.add('range-loading');
     row.querySelectorAll('.range-btn').forEach(b => {
       b.classList.toggle('active', b.dataset.range === range);
     });
   }
 
   const ch = mainCharts[id];
-  if (!ch) { if (row) row.classList.remove('range-loading'); return; }
+  if (!ch) return;
+
+  // ② 1d → state 캐시에서 즉시 적용 (네트워크 없음)
+  if (range === '1d') {
+    const s = state[id];
+    applyChartData(ch, cfg, [...s.labels], [...s.history], '1d');
+    return;
+  }
+
+  // ③ 캐시 확인 → 있으면 즉시 적용
+  const cKey = `${id}-${range}`;
+  const cached = _rangeCache[cKey];
+  if (cached && Date.now() - cached.ts < RANGE_CACHE_TTL) {
+    applyChartData(ch, cfg, cached.labels, cached.values, range);
+    return;
+  }
+
+  // ④ 캐시 없음 → 로딩 표시 후 fetch
+  showChartLoading(id, true);
+  if (row) row.classList.add('range-loading');
 
   try {
-    let labels, values;
+    const res  = await fetch(`${API_BASE}/api/history?sym=${encodeURIComponent(cfg.sym)}&range=${range}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error);
 
-    if (range === '1d') {
-      // 1d는 이미 state에 최신 데이터가 있음 → 서버 요청 불필요
-      const s = state[id];
-      labels = [...s.labels];
-      values = [...s.history];
-    } else {
-      // 1d 이외의 범위는 /api/history에서 가져옴
-      const res  = await fetch(`${API_BASE}/api/history?sym=${encodeURIComponent(cfg.sym || cfg.id)}&range=${range}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      if (!json.ok) throw new Error(json.error);
-      const history = json.data.history;
-      labels = history.map(p => fmtLabel(p.time, range));
-      values = history.map(p => p.value);
+    const history = json.data.history;
+    const labels  = history.map(p => fmtLabel(p.time, range));
+    const values  = history.map(p => p.value);
+
+    // 캐시 저장 (5분 TTL)
+    _rangeCache[cKey] = { labels, values, ts: Date.now() };
+
+    // 현재 선택 range가 바뀌지 않은 경우만 적용
+    if (_chartRange[id] === range) {
+      applyChartData(ch, cfg, labels, values, range);
     }
-
-    ch.data.labels           = labels;
-    ch.data.datasets[0].data = values;
-
-    // x축 표시 여부 및 라벨 밀도 조절
-    const showX = range !== '1d';
-    ch.options.scales.x.display = showX;
-    if (showX) {
-      ch.options.scales.x.ticks = ch.options.scales.x.ticks || {};
-      ch.options.scales.x.ticks.color = '#64748b';
-      ch.options.scales.x.ticks.font  = { size: 10 };
-      ch.options.scales.x.ticks.maxRotation = 0;
-      ch.options.scales.x.ticks.maxTicksLimit = range === '5d' ? 10 : 8;
-    }
-
-    // 차트 색상 업데이트 (up/down 방향)
-    const first = values[0] ?? 0;
-    const last  = values[values.length - 1] ?? 0;
-    const isUp  = last >= first;
-    const market = cfg.market || 'us';
-    const lineColor = isUp ? upHex(market) : downHex(market);
-    ch.data.datasets[0].borderColor = lineColor;
-    ch.data.datasets[0].backgroundColor = hexToRgba(lineColor, .15);
-
-    ch.update('active');
   } catch (e) {
-    console.warn(`range fetch error [${id}] ${range}:`, e.message);
-    // 실패 시 활성 버튼 복원
-    if (row) {
-      row.querySelectorAll('.range-btn').forEach(b => {
-        b.classList.toggle('active', b.dataset.range === (range === '1d' ? '1d' : '1d'));
-      });
-    }
+    console.warn(`range fetch error [${id}][${range}]:`, e.message);
+    // 실패 시 1d로 롤백
+    _chartRange[id] = '1d';
+    if (row) row.querySelectorAll('.range-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.range === '1d');
+    });
   } finally {
+    showChartLoading(id, false);
     if (row) row.classList.remove('range-loading');
   }
 }
