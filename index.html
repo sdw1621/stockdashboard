@@ -1739,11 +1739,12 @@ function updateAllDisplays() {
       sp.update('none');
     }
 
-    // ── Main chart ──
+    // ── Main chart (1d 실시간만 자동 갱신; 다른 range는 유지) ──
     const mc = mainCharts[idx.id];
-    if (mc) {
+    if (mc && (!_chartRange[idx.id] || _chartRange[idx.id] === '1d')) {
       mc.data.labels           = [...s.labels];
       mc.data.datasets[0].data = [...s.history];
+      mc.options.scales.x.display = false;  // 1d는 x축 숨김
       mc.update();
     }
 
@@ -2516,42 +2517,60 @@ async function setChartRange(id, range) {
     });
   }
 
+  const ch = mainCharts[id];
+  if (!ch) { if (row) row.classList.remove('range-loading'); return; }
+
   try {
-    const res  = await fetch(`${API_BASE}/api/history?sym=${encodeURIComponent(cfg.sym || cfg.id)}&range=${range}`);
-    const json = await res.json();
-    if (!json.ok) throw new Error(json.error);
+    let labels, values;
 
-    const history = json.data.history;
-    const ch = mainCharts[id];
-    if (!ch) return;
+    if (range === '1d') {
+      // 1d는 이미 state에 최신 데이터가 있음 → 서버 요청 불필요
+      const s = state[id];
+      labels = [...s.labels];
+      values = [...s.history];
+    } else {
+      // 1d 이외의 범위는 /api/history에서 가져옴
+      const res  = await fetch(`${API_BASE}/api/history?sym=${encodeURIComponent(cfg.sym || cfg.id)}&range=${range}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error);
+      const history = json.data.history;
+      labels = history.map(p => fmtLabel(p.time, range));
+      values = history.map(p => p.value);
+    }
 
-    ch.data.labels   = history.map(p => fmtLabel(p.time, range));
-    ch.data.datasets[0].data = history.map(p => p.value);
+    ch.data.labels           = labels;
+    ch.data.datasets[0].data = values;
 
     // x축 표시 여부 및 라벨 밀도 조절
-    ch.options.scales.x.display = true;
-    ch.options.scales.x.ticks = ch.options.scales.x.ticks || {};
-    ch.options.scales.x.ticks.color = '#64748b';
-    ch.options.scales.x.ticks.font  = { size: 10 };
-    ch.options.scales.x.ticks.maxRotation = 0;
-    const maxTicks = range === '1d' ? 8 : range === '5d' ? 10 : 8;
-    ch.options.scales.x.ticks.maxTicksLimit = maxTicks;
+    const showX = range !== '1d';
+    ch.options.scales.x.display = showX;
+    if (showX) {
+      ch.options.scales.x.ticks = ch.options.scales.x.ticks || {};
+      ch.options.scales.x.ticks.color = '#64748b';
+      ch.options.scales.x.ticks.font  = { size: 10 };
+      ch.options.scales.x.ticks.maxRotation = 0;
+      ch.options.scales.x.ticks.maxTicksLimit = range === '5d' ? 10 : 8;
+    }
 
     // 차트 색상 업데이트 (up/down 방향)
-    const first = history[0]?.value ?? 0;
-    const last  = history[history.length - 1]?.value ?? 0;
+    const first = values[0] ?? 0;
+    const last  = values[values.length - 1] ?? 0;
     const isUp  = last >= first;
     const market = cfg.market || 'us';
     const lineColor = isUp ? upHex(market) : downHex(market);
-    ch.data.datasets[0].borderColor          = lineColor;
-    ch.data.datasets[0].pointBackgroundColor = lineColor;
-    if (typeof ch.data.datasets[0].backgroundColor !== 'function') {
-      ch.data.datasets[0].backgroundColor = lineColor + '22';
-    }
+    ch.data.datasets[0].borderColor = lineColor;
+    ch.data.datasets[0].backgroundColor = hexToRgba(lineColor, .15);
 
     ch.update('active');
   } catch (e) {
     console.warn(`range fetch error [${id}] ${range}:`, e.message);
+    // 실패 시 활성 버튼 복원
+    if (row) {
+      row.querySelectorAll('.range-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.range === (range === '1d' ? '1d' : '1d'));
+      });
+    }
   } finally {
     if (row) row.classList.remove('range-loading');
   }
