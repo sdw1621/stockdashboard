@@ -843,6 +843,10 @@
     <button class="rec-filter-btn" data-f="kr">🇰🇷 국내</button>
     <button class="rec-filter-btn" data-f="us">🇺🇸 해외</button>
     <button class="rec-filter-btn" data-f="strong-buy">⭐ 강력매수</button>
+    <button class="rec-filter-btn" data-f="semiconductor">🔬 반도체·AI</button>
+    <button class="rec-filter-btn" data-f="it">💻 IT</button>
+    <button class="rec-filter-btn" data-f="aerospace">🚀 우주항공</button>
+    <button class="rec-filter-btn" data-f="robotics">🤖 로봇</button>
   </div>
   <div class="rec-grid" id="recGrid"></div>
 
@@ -1631,71 +1635,132 @@ const NEWS = [
    RECOMMENDATIONS  (애널리스트 컨센서스 기반 · 참고용)
 ════════════════════════════════════════════════════════ */
 const RECS = [
+  /* ── 반도체·AI ─────────────────────────────────────── */
   {
-    ticker: '000660.KS', name: 'SK하이닉스', market: 'kr', flag: '🇰🇷', sector: '반도체',
-    rating: 'sb', ratingLabel: '강력매수',
-    color: '#3b82f6',
+    ticker: '000660.KS', name: 'SK하이닉스', market: 'kr', flag: '🇰🇷',
+    sector: '반도체', group: 'semiconductor',
+    rating: 'sb', ratingLabel: '강력매수', color: '#3b82f6',
     targetPrice: 350000, currentPrice: 284000, currency: 'KRW', decimals: 0,
     risk: 2, riskLabel: '중간',
-    points: [
-      'HBM3E 독점 공급 — NVIDIA Blackwell 핵심 파트너',
-      'AI 서버 수요 급증, 2025년 영업이익 10조+ 전망',
-    ],
+    points: ['HBM3E 독점 공급 — NVIDIA Blackwell 핵심 파트너', 'AI 서버 수요 급증, 영업이익 10조+ 전망'],
   },
   {
-    ticker: '005930.KS', name: '삼성전자', market: 'kr', flag: '🇰🇷', sector: '반도체/파운드리',
-    rating: 'b', ratingLabel: '매수',
-    color: '#6366f1',
+    ticker: '005930.KS', name: '삼성전자', market: 'kr', flag: '🇰🇷',
+    sector: '반도체/파운드리', group: 'semiconductor',
+    rating: 'b', ratingLabel: '매수', color: '#6366f1',
     targetPrice: 85000, currentPrice: 65200, currency: 'KRW', decimals: 0,
     risk: 1, riskLabel: '낮음',
-    points: [
-      '테슬라 AI6 파운드리 165억달러 수주 — 파운드리 회복 신호',
-      'HBM4 양산 임박, 반도체 부문 실적 개선 구간 진입',
-    ],
+    points: ['테슬라 AI6 파운드리 165억달러 수주 — 파운드리 회복 신호', 'HBM4 양산 임박, 반도체 부문 개선 구간'],
   },
   {
-    ticker: 'NVDA', name: 'NVIDIA', market: 'us', flag: '🇺🇸', sector: 'AI·GPU',
-    rating: 'sb', ratingLabel: '강력매수',
-    color: '#22c55e',
+    ticker: 'NVDA', name: 'NVIDIA', market: 'us', flag: '🇺🇸',
+    sector: 'AI·GPU', group: 'semiconductor',
+    rating: 'sb', ratingLabel: '강력매수', color: '#22c55e',
     targetPrice: 200, currentPrice: 135.5, currency: 'USD', decimals: 2,
     risk: 2, riskLabel: '중간',
-    points: [
-      'Blackwell 아키텍처 수요 공급 초과 — 데이터센터 매출 폭발',
-      'AI 가속기 시장 점유율 80%+ 압도적 유지',
-    ],
+    points: ['Blackwell 수요 공급 초과 — 데이터센터 매출 폭발', 'AI 가속기 시장 점유율 80%+ 압도적 유지'],
   },
   {
-    ticker: 'TSM', name: 'TSMC', market: 'us', flag: '🇺🇸', sector: '파운드리',
-    rating: 'sb', ratingLabel: '강력매수',
-    color: '#f59e0b',
+    ticker: 'TSM', name: 'TSMC', market: 'us', flag: '🇺🇸',
+    sector: '파운드리', group: 'semiconductor',
+    rating: 'sb', ratingLabel: '강력매수', color: '#f59e0b',
     targetPrice: 260, currentPrice: 195, currency: 'USD', decimals: 2,
     risk: 1, riskLabel: '낮음',
-    points: [
-      'CoWoS 패키징 독점 — AI 반도체 전량 위탁 생산 수혜',
-      '2nm 공정 양산 개시, 기술 격차 2년 이상 유지',
-    ],
+    points: ['CoWoS 패키징 독점 — AI 반도체 전량 위탁 생산 수혜', '2nm 공정 양산 개시, 기술 격차 2년+ 유지'],
   },
   {
-    ticker: '066570.KS', name: 'LG전자', market: 'kr', flag: '🇰🇷', sector: '가전·전장',
-    rating: 'b', ratingLabel: '매수',
-    color: '#8b5cf6',
+    ticker: '066570.KS', name: 'LG전자', market: 'kr', flag: '🇰🇷',
+    sector: '가전·전장', group: 'consumer',
+    rating: 'b', ratingLabel: '매수', color: '#8b5cf6',
     targetPrice: 130000, currentPrice: 107000, currency: 'KRW', decimals: 0,
     risk: 1, riskLabel: '낮음',
-    points: [
-      '1Q 어닝서프라이즈 — 전장(VS)·HVAC B2B 고마진 성장 지속',
-      '1,000억 자사주 매입 집행 중, 주주환원 강화',
-    ],
+    points: ['1Q 어닝서프라이즈 — 전장(VS)·HVAC B2B 고마진 성장', '1,000억 자사주 매입 집행 중, 주주환원 강화'],
   },
   {
-    ticker: 'TSLA', name: 'Tesla', market: 'us', flag: '🇺🇸', sector: '전기차·AI',
-    rating: 'n', ratingLabel: '중립',
-    color: '#64748b',
+    ticker: 'TSLA', name: 'Tesla', market: 'us', flag: '🇺🇸',
+    sector: '전기차·AI', group: 'ev',
+    rating: 'n', ratingLabel: '중립', color: '#64748b',
     targetPrice: 300, currentPrice: 285, currency: 'USD', decimals: 2,
     risk: 3, riskLabel: '높음',
-    points: [
-      'FSD 글로벌 확장 긍정적, 단기 밸류에이션 부담 상존',
-      '로보택시 상용화 일정 지연 리스크 주의',
-    ],
+    points: ['FSD 글로벌 확장 긍정적, 단기 밸류에이션 부담 상존', '로보택시 상용화 일정 지연 리스크 주의'],
+  },
+
+  /* ── IT ────────────────────────────────────────────── */
+  {
+    ticker: 'MSFT', name: 'Microsoft', market: 'us', flag: '🇺🇸',
+    sector: '클라우드·AI', group: 'it',
+    rating: 'sb', ratingLabel: '강력매수', color: '#0ea5e9',
+    targetPrice: 520, currentPrice: 430, currency: 'USD', decimals: 2,
+    risk: 1, riskLabel: '낮음',
+    points: ['Azure OpenAI 서비스 YoY +60% 성장, 클라우드 2위 굳히기', 'Copilot 엔터프라이즈 유료 전환율 상승 → 구독 ARPU 확대'],
+  },
+  {
+    ticker: 'META', name: 'Meta Platforms', market: 'us', flag: '🇺🇸',
+    sector: '소셜·AI인프라', group: 'it',
+    rating: 'b', ratingLabel: '매수', color: '#3b82f6',
+    targetPrice: 720, currentPrice: 590, currency: 'USD', decimals: 2,
+    risk: 2, riskLabel: '중간',
+    points: ['Llama 4 오픈소스 생태계 확산 — AI 광고 타겟팅 효율 급상승', 'Meta AI 월간 사용자 10억 돌파, VR/AR 수익화 본격화'],
+  },
+  {
+    ticker: 'GOOGL', name: 'Alphabet (Google)', market: 'us', flag: '🇺🇸',
+    sector: '검색·클라우드', group: 'it',
+    rating: 'b', ratingLabel: '매수', color: '#f97316',
+    targetPrice: 220, currentPrice: 175, currency: 'USD', decimals: 2,
+    risk: 2, riskLabel: '중간',
+    points: ['Gemini 2.0 검색 통합 → 광고 클릭율 방어 성공', 'Google Cloud AI 계약 급증, 영업이익률 개선 추세'],
+  },
+
+  /* ── 우주항공 ───────────────────────────────────────── */
+  {
+    ticker: 'RKLB', name: 'Rocket Lab', market: 'us', flag: '🇺🇸',
+    sector: '우주발사체', group: 'aerospace',
+    rating: 'b', ratingLabel: '매수', color: '#ec4899',
+    targetPrice: 35, currentPrice: 23, currency: 'USD', decimals: 2,
+    risk: 3, riskLabel: '높음',
+    points: ['Electron 소형 발사체 시장 2위 — SpaceX 외 유일 상업 검증체', 'Neutron 중형 발사체 2026년 첫 비행 예정, 가치 재평가 트리거'],
+  },
+  {
+    ticker: 'NOC', name: 'Northrop Grumman', market: 'us', flag: '🇺🇸',
+    sector: '방산·우주', group: 'aerospace',
+    rating: 'b', ratingLabel: '매수', color: '#a78bfa',
+    targetPrice: 620, currentPrice: 518, currency: 'USD', decimals: 2,
+    risk: 1, riskLabel: '낮음',
+    points: ['B-21 Raider 스텔스 폭격기 양산 — 다년 계약 안정 수익', '우주 시스템(GBSD 핵탄도미사일·위성) 포트폴리오 확대'],
+  },
+  {
+    ticker: 'LUNR', name: 'Intuitive Machines', market: 'us', flag: '🇺🇸',
+    sector: '달 탐사', group: 'aerospace',
+    rating: 'n', ratingLabel: '중립', color: '#94a3b8',
+    targetPrice: 12, currentPrice: 9, currency: 'USD', decimals: 2,
+    risk: 3, riskLabel: '높음',
+    points: ['NASA Artemis 달 착륙선 계약 보유 — 우주 인프라 선구자', '수익 모델 초기 단계, 고변동성 투기적 성격 주의'],
+  },
+
+  /* ── 로봇 ───────────────────────────────────────────── */
+  {
+    ticker: 'ISRG', name: 'Intuitive Surgical', market: 'us', flag: '🇺🇸',
+    sector: '수술로봇', group: 'robotics',
+    rating: 'sb', ratingLabel: '강력매수', color: '#14b8a6',
+    targetPrice: 650, currentPrice: 530, currency: 'USD', decimals: 2,
+    risk: 1, riskLabel: '낮음',
+    points: ['da Vinci 수술로봇 세계 시장 점유율 75%+ 독점 지위', 'da Vinci 5 출시 → ASP 상승, 수술 건수 YoY +17% 성장'],
+  },
+  {
+    ticker: 'ABB', name: 'ABB Ltd', market: 'us', flag: '🇨🇭',
+    sector: '산업자동화', group: 'robotics',
+    rating: 'b', ratingLabel: '매수', color: '#f59e0b',
+    targetPrice: 65, currentPrice: 52, currency: 'USD', decimals: 2,
+    risk: 1, riskLabel: '낮음',
+    points: ['산업용 로봇 글로벌 2위 — 제조업 자동화 수요 구조적 성장', 'AI 기반 협동 로봇(YuMi) 라인업 확대, 마진 개선 중'],
+  },
+  {
+    ticker: '005380.KS', name: '현대차', market: 'kr', flag: '🇰🇷',
+    sector: '로봇·전기차', group: 'robotics',
+    rating: 'b', ratingLabel: '매수', color: '#22c55e',
+    targetPrice: 310000, currentPrice: 242000, currency: 'KRW', decimals: 0,
+    risk: 2, riskLabel: '중간',
+    points: ['보스턴 다이나믹스 완전 인수 — 휴머노이드 로봇 사업화 본격화', 'Spot·Atlas 상업 배포 확대, EV 수출 회복으로 이중 성장 동력'],
   },
 ];
 
@@ -1704,9 +1769,13 @@ let _recFilter = 'all';
 function buildRecommendations() {
   const grid = document.getElementById('recGrid');
   const filtered = RECS.filter(r => {
-    if (_recFilter === 'kr') return r.market === 'kr';
-    if (_recFilter === 'us') return r.market === 'us';
-    if (_recFilter === 'strong-buy') return r.rating === 'sb';
+    if (_recFilter === 'kr')          return r.market === 'kr';
+    if (_recFilter === 'us')          return r.market === 'us';
+    if (_recFilter === 'strong-buy')  return r.rating === 'sb';
+    if (_recFilter === 'semiconductor') return r.group === 'semiconductor';
+    if (_recFilter === 'it')          return r.group === 'it';
+    if (_recFilter === 'aerospace')   return r.group === 'aerospace';
+    if (_recFilter === 'robotics')    return r.group === 'robotics';
     return true;
   });
 
