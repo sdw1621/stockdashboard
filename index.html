@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -865,6 +865,89 @@
       color:var(--accent); cursor:pointer; transition:background .15s; font-family:inherit;
     }
     .surge-test-btn:hover { background:rgba(59,130,246,.22); }
+
+/* ════ 라이트 모드 변수 ════ */
+[data-theme="light"] {
+  --bg:        #f0f4f8;
+  --surface:   #ffffff;
+  --surface2:  #eef2f7;
+  --border:    #d8e3ef;
+  --text:      #0f172a;
+  --muted:     #4a6080;
+  --card-glow: rgba(59,130,246,.08);
+}
+[data-theme="light"] body::before {
+  background:
+    radial-gradient(ellipse 60% 40% at 15% 0%, rgba(59,130,246,.06) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 85% 100%, rgba(99,102,241,.04) 0%, transparent 70%);
+}
+[data-theme="light"] header {
+  background: rgba(240,244,248,.92);
+}
+[data-theme="light"] .ticker-wrap { background: #fff; }
+[data-theme="light"] .ticker-wrap::before { background: linear-gradient(to right, #fff, transparent); }
+[data-theme="light"] .ticker-wrap::after  { background: linear-gradient(to left, #fff, transparent); }
+[data-theme="light"] .update-bar { background: rgba(255,255,255,.9); }
+[data-theme="light"] .modal-box  { background: #fff; }
+[data-theme="light"] .surge-panel { background: #fff; }
+[data-theme="light"] .s-toast { background: #fff; }
+[data-theme="light"] .badge-up   { background: rgba(34,197,94,.12); }
+[data-theme="light"] .badge-down { background: rgba(239,68,68,.12); }
+[data-theme="light"] .badge-kr-up   { background: rgba(239,68,68,.12); }
+[data-theme="light"] .badge-kr-down { background: rgba(59,130,246,.12); }
+[data-theme="light"] .search-input { background: #fff; color: #0f172a; }
+[data-theme="light"] .heat-cell { color: #0f172a; }
+[data-theme="light"] .news-text { color: #1e293b; }
+[data-theme="light"] .rec-badge.sb { background: rgba(59,130,246,.12);  color: #1d4ed8; }
+[data-theme="light"] .rec-badge.b  { background: rgba(99,102,241,.12);  color: #4338ca; }
+[data-theme="light"] .rec-badge.n  { background: rgba(100,116,139,.1);  color: #475569; }
+[data-theme="light"] .rec-badge.s  { background: rgba(239,68,68,.12);   color: #dc2626; }
+[data-theme="light"] .surge-toggle { background: #cbd5e1; }
+[data-theme="light"] .surge-test-btn { color: #1d4ed8; }
+[data-theme="light"] .rec-filter-btn { color: #4a6080; }
+[data-theme="light"] .surge-cfg-btn { background: #fff; }
+
+/* ════ 모바일 반응형 ════ */
+@media (max-width: 768px) {
+  header {
+    padding: 0 16px;
+    height: 56px;
+  }
+  .logo-text { display: none; }   /* 모바일에서 로고 텍스트 숨김 */
+  .market-badges { display: none; }   /* 배지 숨김 */
+  #statusText { display: none; }
+  .header-right { gap: 12px; }
+  main { padding: 20px 14px 48px; }
+  .cards-grid { gap: 12px; }
+  .charts-grid { gap: 14px; }
+  .widget-row {
+    flex-direction: column !important;
+    gap: 16px !important;
+  }
+  .news-card, .heatmap-card {
+    width: 100% !important;
+    min-width: unset !important;
+  }
+  .rec-filter { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+  .rec-filter::-webkit-scrollbar { height: 3px; }
+  .rec-filter::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .search-bar { flex-wrap: wrap; }
+  .search-input { max-width: 100%; flex: 1 1 200px; }
+  .search-hint { font-size: .68rem; }
+  #surgeToasts { max-width: calc(100vw - 36px); right: 10px; top: 66px; }
+  .s-toast { padding: 11px 14px 8px; gap: 9px; }
+  .surge-cfg-btn { bottom: 14px; right: 14px; }
+  .surge-panel { right: 14px; bottom: 66px; min-width: 240px; }
+  .update-bar { right: 12px; bottom: 16px; font-size: .7rem; padding: 6px 12px; }
+  .modal-box { width: 96vw !important; max-height: 90vh !important; padding: 18px !important; }
+  .chart-wrap { height: 180px !important; }
+  .section-title { font-size: .63rem; }
+}
+@media (max-width: 480px) {
+  .card-value { font-size: 1.6rem !important; }
+  .chart-current { font-size: 1.1rem !important; }
+  .cards-grid { grid-template-columns: repeat(2, 1fr); }
+}
   </style>
 </head>
 <body>
@@ -881,6 +964,12 @@
       <div class="status-dot" id="statusDot"></div>
       <span id="statusText">데이터 수신 중...</span>
     </div>
+    <button id="themeBtn" title="다크/라이트 모드" style="
+  background:none; border:1px solid var(--border); border-radius:8px;
+  color:var(--text); cursor:pointer; font-size:1rem;
+  width:34px; height:34px; display:flex; align-items:center; justify-content:center;
+  transition:background .2s, border-color .2s;
+" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">☀️</button>
     <div id="clock"></div>
   </div>
 </header>
@@ -1069,6 +1158,12 @@
      → 로컬 localhost:3001 / 프로덕션 Railway URL 모두 자동 대응
 ════════════════════════════════════════════════════════ */
 const API_BASE = location.protocol === 'file:' ? 'http://localhost:3001' : '';
+
+/* ── 다크/라이트 테마 ────────────────────────────────── */
+(function() {
+  const saved = localStorage.getItem('sv-theme') || 'dark';
+  document.documentElement.dataset.theme = saved;
+})();
 
 /* ── file:// 접속 감지 → 안내 배너 표시 ─────────────────── */
 if (location.protocol === 'file:') {
@@ -2317,6 +2412,42 @@ document.getElementById('surgeTestBtn').addEventListener('click', () => {
 /* ════════════════════════════════════════════════════════
    INIT
 ════════════════════════════════════════════════════════ */
+
+/* ── 테마 토글 ────────────────────────────────────────── */
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem('sv-theme', theme);
+  document.getElementById('themeBtn').textContent = theme === 'dark' ? '☀️' : '🌙';
+  // 차트 색상 업데이트
+  const isDark = theme === 'dark';
+  const gridColor   = isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.07)';
+  const labelColor  = isDark ? '#5a7494' : '#4a6080';
+  if (window.Chart) {
+    Chart.defaults.color = labelColor;
+    Chart.defaults.borderColor = gridColor;
+  }
+  // 기존 차트 인스턴스 업데이트
+  Object.values(mainCharts || {}).forEach(ch => {
+    if (!ch) return;
+    ch.options.scales.x.grid.color  = gridColor;
+    ch.options.scales.y.grid.color  = gridColor;
+    ch.options.scales.x.ticks.color = labelColor;
+    ch.options.scales.y.ticks.color = labelColor;
+    ch.update('none');
+  });
+}
+
+document.getElementById('themeBtn').addEventListener('click', () => {
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+});
+
+// 초기 버튼 아이콘 동기화
+(function() {
+  const t = document.documentElement.dataset.theme;
+  document.getElementById('themeBtn').textContent = t === 'dark' ? '☀️' : '🌙';
+})();
+
 buildRecommendations();
 buildNews();
 buildHeatmap();
