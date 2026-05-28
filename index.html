@@ -2221,8 +2221,8 @@ function showSurgeToast(cfg, price, chgPct, forceDur) {
   const isUp   = chgPct > 0;
   const isKR   = cfg.market === 'kr';
   const color  = isUp
-    ? (isKR ? '#ef4444' : '#22c55e')
-    : (isKR ? '#3b82f6' : '#ef4444');
+    ? (isKR ? '#ef4444' : '#22c55e')   // 급등: KR=빨강, US=초록
+    : '#3b82f6';                        // 급락: 항상 파랑
   const icon   = isUp ? '🚀' : '📉';
   const label  = isUp ? '급등' : '급락';
   const pctStr = (isUp ? '+' : '') + chgPct.toFixed(2) + '%';
