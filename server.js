@@ -108,6 +108,16 @@ async function refreshAll() {
           }))
           .filter(p => p.value !== null && !Number.isNaN(p.value));
 
+        const ohlcv = ts
+          .map((t, i) => ({
+            t: t * 1000,
+            o: q.open?.[i]  ?? null,
+            h: q.high?.[i]  ?? null,
+            l: q.low?.[i]   ?? null,
+            c: q.close?.[i] ?? null,
+          }))
+          .filter(p => p.c !== null && !Number.isNaN(p.c));
+
         next[id] = {
           current  : meta.regularMarketPrice,
           prevClose: meta.chartPreviousClose ?? meta.previousClose ?? meta.regularMarketPrice,
@@ -115,6 +125,7 @@ async function refreshAll() {
           high     : meta.regularMarketDayHigh,
           low      : meta.regularMarketDayLow,
           history,
+          ohlcv,
         };
 
         detectSurge(id, name, meta.regularMarketPrice);   // ← 급등 감지
@@ -140,10 +151,13 @@ app.get('/api/surges', (req, res) => {
 
 /* ── 히스토리 엔드포인트 ────────────────────────────── */
 const RANGE_MAP = {
+  '1h' : { range: '1d',  interval: '1m'  },
   '1d' : { range: '1d',  interval: '2m'  },
   '5d' : { range: '5d',  interval: '15m' },
   '1mo': { range: '1mo', interval: '60m' },
+  '6mo': { range: '6mo', interval: '1d'  },
   '1y' : { range: '1y',  interval: '1d'  },
+  '3y' : { range: '3y',  interval: '1wk' },
   '5y' : { range: '5y',  interval: '1wk' },
 };
 
@@ -170,6 +184,16 @@ app.get('/api/history', async (req, res) => {
       }))
       .filter(p => p.value !== null && !Number.isNaN(p.value));
 
+    const ohlcv = ts
+      .map((t, i) => ({
+        t: t * 1000,
+        o: q.open?.[i]  ?? null,
+        h: q.high?.[i]  ?? null,
+        l: q.low?.[i]   ?? null,
+        c: q.close?.[i] ?? null,
+      }))
+      .filter(p => p.c !== null && !Number.isNaN(p.c));
+
     res.json({
       ok: true,
       data: {
@@ -177,6 +201,7 @@ app.get('/api/history', async (req, res) => {
         current : meta.regularMarketPrice,
         prevClose: meta.chartPreviousClose ?? meta.previousClose,
         history,
+        ohlcv,
       },
     });
     console.log(`📊  히스토리: ${sym} [${range}] → ${history.length}pts`);

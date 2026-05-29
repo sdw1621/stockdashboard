@@ -345,7 +345,7 @@
 
     .chart-wrap {
       position: relative;
-      height: 220px;
+      height: 230px;
     }
 
     .chart-footer {
@@ -950,16 +950,18 @@
 }
     /* ── 범위 버튼 ──────────────────────────────────────── */
     .range-row {
-      display: flex; gap: 4px;
-      margin-bottom: 14px;
+      display: flex; gap: 3px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
     }
     .range-btn {
-      font-size: .65rem; font-weight: 600;
-      padding: 3px 9px; border-radius: 6px;
+      font-size: .62rem; font-weight: 600;
+      padding: 3px 7px; border-radius: 6px;
       border: 1px solid var(--border);
       background: transparent; color: var(--muted);
       cursor: pointer; transition: all .15s; font-family: inherit;
-      letter-spacing: .02em;
+      letter-spacing: .01em;
+      white-space: nowrap;
     }
     .range-btn:hover:not(.active) {
       border-color: #2a3d56; color: var(--text);
@@ -973,6 +975,26 @@
     .range-loading {
       opacity: .55; pointer-events: none;
     }
+    /* ── 차트 타입 버튼 (라인/캔들) ────────────────────── */
+    .chart-type-btn {
+      font-size: .62rem; font-weight: 600;
+      padding: 3px 9px; border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent; color: var(--muted);
+      cursor: pointer; transition: all .15s; font-family: inherit;
+      margin-left: auto;
+      white-space: nowrap;
+    }
+    .chart-type-btn:hover {
+      border-color: var(--accent); color: var(--accent);
+      background: rgba(59,130,246,.08);
+    }
+    .chart-type-btn.candle-active {
+      background: rgba(245,158,11,.14);
+      color: #f59e0b;
+      border-color: rgba(245,158,11,.4);
+    }
+
     /* ── 차트 로딩 오버레이 ────────────────────────────── */
     .chart-loading {
       position: absolute; inset: 0;
@@ -1253,6 +1275,7 @@ INDICES.forEach(idx => {
     low:       null,
     history:   [],
     labels:    [],
+    ohlcv:     [],
     loaded:    false,
   };
 });
@@ -1502,6 +1525,115 @@ function buildSparkline(idx) {
   });
 }
 
+
+/* ════════════════════════════════════════════════════════
+   CANDLESTICK PLUGIN  — chart._ohlcv / chart._candleMode
+════════════════════════════════════════════════════════ */
+Chart.register({
+  id: 'candlestickDraw',
+  afterDatasetsDraw(chart) {
+    if (!chart._candleMode) return;
+    const ohlcv = chart._ohlcv;
+    if (!ohlcv || !ohlcv.length) return;
+
+    const { ctx, scales } = chart;
+    const xScale = scales.x;
+    const yScale = scales.y;
+    if (!xScale || !yScale) return;
+
+    const nPts  = ohlcv.length;
+    const chartW = xScale.right - xScale.left;
+    const candleW = Math.max(1.5, Math.min(10, chartW / nPts * 0.65));
+    const market  = chart._market || 'us';
+
+    // KR: 상승=빨강, 하락=파랑 / US: 상승=초록, 하락=빨강
+    const upCol   = market === 'kr' ? '#ef4444' : '#22c55e';
+    const downCol = market === 'kr' ? '#3b82f6' : '#ef4444';
+
+    ctx.save();
+    ohlcv.forEach((d, i) => {
+      if (!d || !d.c || !d.o || d.c <= 0 || d.o <= 0) return;
+      const xPos = xScale.getPixelForIndex(i);
+      const yO   = yScale.getPixelForValue(d.o);
+      const yC   = yScale.getPixelForValue(d.c);
+      const yH   = yScale.getPixelForValue(d.h ?? Math.max(d.o, d.c));
+      const yL   = yScale.getPixelForValue(d.l ?? Math.min(d.o, d.c));
+
+      const isUp = d.c >= d.o;
+      const color = isUp ? upCol : downCol;
+      ctx.strokeStyle = color;
+      ctx.fillStyle   = color;
+      ctx.lineWidth   = 1;
+
+      // 고저선 (wick)
+      ctx.beginPath();
+      ctx.moveTo(xPos, yH);
+      ctx.lineTo(xPos, yL);
+      ctx.stroke();
+
+      // 몸통 (body)
+      const bodyTop = Math.min(yO, yC);
+      const bodyH   = Math.max(1, Math.abs(yO - yC));
+      if (isUp) {
+        ctx.strokeRect(xPos - candleW / 2, bodyTop, candleW, bodyH);
+      } else {
+        ctx.fillRect(xPos - candleW / 2, bodyTop, candleW, bodyH);
+      }
+    });
+    ctx.restore();
+  },
+});
+
+/* ── 차트 타입 전환 ─────────────────────────────────── */
+function switchChartType(id) {
+  const ch  = mainCharts[id];
+  const cfg = IDX_MAP[id];
+  if (!ch || !cfg) return;
+
+  const current = _chartMode[id] || 'line';
+  const next    = current === 'line' ? 'candle' : 'line';
+  _chartMode[id] = next;
+
+  const ohlcv  = ch._ohlcv || [];
+  const values = ch.data.datasets[0].data;
+  const first  = values[0] ?? 0;
+  const last   = values[values.length - 1] ?? 0;
+  const isUp   = last >= first;
+  const lineColor = isUp ? upHex(cfg.market) : downHex(cfg.market);
+
+  if (next === 'candle') {
+    ch._candleMode = true;
+    ch.data.datasets[0].borderColor     = 'transparent';
+    ch.data.datasets[0].backgroundColor = 'transparent';
+    // y축을 OHLCV 전체 범위로 확장
+    if (ohlcv.length) {
+      const lows  = ohlcv.map(d => d.l).filter(v => v != null && v > 0);
+      const highs = ohlcv.map(d => d.h).filter(v => v != null && v > 0);
+      if (lows.length && highs.length) {
+        const pad = (Math.max(...highs) - Math.min(...lows)) * 0.02;
+        try { ch.options.scales.y.min = Math.min(...lows)  - pad; } catch(_) {}
+        try { ch.options.scales.y.max = Math.max(...highs) + pad; } catch(_) {}
+      }
+    }
+  } else {
+    ch._candleMode = false;
+    ch.data.datasets[0].borderColor     = lineColor;
+    ch.data.datasets[0].backgroundColor = hexToRgba(lineColor, .15);
+    // y축 자동 스케일 복원
+    try { ch.options.scales.y.min = undefined; } catch(_) {}
+    try { ch.options.scales.y.max = undefined; } catch(_) {}
+  }
+
+  ch.update('active');
+
+  // 버튼 UI 업데이트
+  const btn = document.querySelector(`.chart-type-btn[data-chartid="${id}"]`);
+  if (btn) {
+    btn.textContent = next === 'candle' ? '🕯 캔들' : '📈 라인';
+    btn.classList.toggle('candle-active', next === 'candle');
+  }
+}
+
 /* ════════════════════════════════════════════════════════
    BUILD MAIN CHARTS
 ════════════════════════════════════════════════════════ */
@@ -1530,11 +1662,15 @@ function buildCharts() {
           </div>
         </div>
         <div class="range-row" data-chartid="${idx.id}">
-          <button class="range-btn active" data-range="1d">1일</button>
+          <button class="range-btn" data-range="1h">1시간</button>
+          <button class="range-btn" data-range="1d">1일</button>
           <button class="range-btn" data-range="5d">1주</button>
           <button class="range-btn" data-range="1mo">1달</button>
+          <button class="range-btn" data-range="6mo">6개월</button>
           <button class="range-btn" data-range="1y">1년</button>
-          <button class="range-btn" data-range="5y">5년</button>
+          <button class="range-btn" data-range="3y">3년</button>
+          <button class="range-btn active" data-range="5y">5년</button>
+          <button class="chart-type-btn" data-chartid="${idx.id}" title="라인/캔들 차트 전환">📈 라인</button>
         </div>
         <div class="chart-wrap">
           <canvas id="chart-${idx.id}"></canvas>
@@ -1571,9 +1707,9 @@ function buildCharts() {
     mainCharts[idx.id] = new Chart(canvas, {
       type: 'line',
       data: {
-        labels:   [...s.labels],
+        labels:   [],
         datasets: [{
-          data:            [...s.history],
+          data:            [],
           borderColor:     color,
           borderWidth:     2,
           fill:            true,
@@ -1603,20 +1739,28 @@ function buildCharts() {
           legend: { display: false },
           tooltip: {
             backgroundColor: '#1a2235',
-            borderColor:     '#1f2d45',
+            borderColor:     color,
             borderWidth:     1,
-            titleColor:      '#64748b',
+            titleColor:      '#94a3b8',
             bodyColor:       '#e2e8f0',
             padding:         10,
+            caretSize:       5,
             callbacks: {
-              label: ctx => ` ${fmt(ctx.parsed.y)}`,
+              title: items => items[0]?.label || '',
+              label: ctx  => ` ${fmt(ctx.parsed.y, dec)}`,
             },
           },
         },
         scales: {
           x: {
-            display:    false,
-            grid:       { display: false },
+            display: true,
+            grid:    { color: 'rgba(31,45,69,.4)', drawBorder: false },
+            ticks: {
+              color:          '#64748b',
+              font:           { size: 10 },
+              maxRotation:    0,
+              maxTicksLimit:  6,
+            },
           },
           y: {
             position:   'right',
@@ -1673,6 +1817,7 @@ async function fetchData() {
         const dt = new Date(p.time);
         return `${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
       });
+      s.ohlcv   = d.ohlcv || [];
     });
 
     if (!chartsReady) {
@@ -1681,6 +1826,8 @@ async function fetchData() {
       buildTicker();
       document.getElementById('loadingOverlay').style.display = 'none';
       chartsReady = true;
+      // 기본 범위: 5년 데이터를 모든 차트에 즉시 로드
+      INDICES.forEach(idx => setChartRange(idx.id, '5y'));
     } else {
       updateAllDisplays();
       checkSurges(data);   // ← 급등·급락 감지 (첫 로드 후부터)
@@ -1762,8 +1909,7 @@ function updateAllDisplays() {
     if (mc && (!_chartRange[idx.id] || _chartRange[idx.id] === '1d')) {
       mc.data.labels           = [...s.labels];
       mc.data.datasets[0].data = [...s.history];
-      mc.options.scales.x.display = false;  // 1d는 x축 숨김
-      mc.update();
+      mc.update('none');
     }
 
     // ── Chart header meta ──
@@ -2502,23 +2648,29 @@ document.getElementById('themeBtn').addEventListener('click', () => {
 /* ════════════════════════════════════════════════════════
    RANGE BUTTONS — 시간 범위 선택
 ════════════════════════════════════════════════════════ */
-const _chartRange = {};              // id → 현재 range
-const _rangeCache = {};              // 'id-range' → {labels, values, ts}
+const _chartRange = {};              // id → 현재 range ('5y' default)
+const _chartMode  = {};              // id → 'line' | 'candle'
+const _rangeCache = {};              // 'id-range' → {labels, values, ohlcv, ts}
 const RANGE_CACHE_TTL = 5 * 60_000; // 5분 캐시
 
 /* ── 라벨 포맷 (range에 따라) ───────────────────────── */
 function fmtLabel(ts, range) {
   const d = new Date(ts);
-  if (range === '1d') {
-    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  const HH = String(d.getHours()).padStart(2,'0');
+  const MM = String(d.getMinutes()).padStart(2,'0');
+  const mo = d.getMonth() + 1;
+  const dy = d.getDate();
+  const yr = d.getFullYear();
+  if (range === '1h' || range === '1d') {
+    return `${HH}:${MM}`;
   }
   if (range === '5d') {
-    return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    return `${mo}/${dy} ${HH}:${MM}`;
   }
-  if (range === '1mo') {
-    return `${d.getMonth()+1}/${d.getDate()}`;
+  if (range === '1mo' || range === '6mo') {
+    return `${mo}/${dy}`;
   }
-  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`;
+  return `${yr}/${String(mo).padStart(2,'0')}`;
 }
 
 /* ── 차트 로딩 오버레이 토글 ────────────────────────── */
@@ -2538,27 +2690,28 @@ function showChartLoading(id, show) {
 }
 
 /* ── 차트에 데이터 + 색상 적용 (공통) ──────────────── */
-function applyChartData(ch, cfg, labels, values, range) {
+function applyChartData(ch, cfg, labels, values, ohlcv, range) {
   ch.data.labels           = labels;
   ch.data.datasets[0].data = values;
-
-  const showX = range !== '1d';
-  ch.options.scales.x.display = showX;
-  if (showX) {
-    ch.options.scales.x.ticks = ch.options.scales.x.ticks || {};
-    ch.options.scales.x.ticks.color       = '#64748b';
-    ch.options.scales.x.ticks.font        = { size: 10 };
-    ch.options.scales.x.ticks.maxRotation = 0;
-    ch.options.scales.x.ticks.maxTicksLimit = range === '5d' ? 10 : 8;
-  }
 
   const first = values[0] ?? 0;
   const last  = values[values.length - 1] ?? 0;
   const isUp  = last >= first;
   const market = cfg.market || 'us';
   const lineColor = isUp ? upHex(market) : downHex(market);
-  ch.data.datasets[0].borderColor     = lineColor;
-  ch.data.datasets[0].backgroundColor = hexToRgba(lineColor, .15);
+
+  const mode = _chartMode[cfg.id] || 'line';
+  if (mode === 'candle') {
+    ch.data.datasets[0].borderColor     = 'transparent';
+    ch.data.datasets[0].backgroundColor = 'transparent';
+  } else {
+    ch.data.datasets[0].borderColor     = lineColor;
+    ch.data.datasets[0].backgroundColor = hexToRgba(lineColor, .15);
+  }
+
+  // Set _ohlcv and _market BEFORE update so the candle plugin uses current data
+  ch._ohlcv  = ohlcv || [];
+  ch._market = cfg.market || 'us';
 
   ch.update('active');
 }
@@ -2581,10 +2734,13 @@ async function setChartRange(id, range) {
   const ch = mainCharts[id];
   if (!ch) return;
 
+  // 줌/팬 초기화 — 이전 범위의 뷰포트가 새 데이터에 남지 않도록
+  ch.resetZoom?.();
+
   // ② 1d → state 캐시에서 즉시 적용 (네트워크 없음)
   if (range === '1d') {
     const s = state[id];
-    applyChartData(ch, cfg, [...s.labels], [...s.history], '1d');
+    applyChartData(ch, cfg, [...s.labels], [...s.history], s.ohlcv || [], '1d');
     return;
   }
 
@@ -2592,7 +2748,7 @@ async function setChartRange(id, range) {
   const cKey = `${id}-${range}`;
   const cached = _rangeCache[cKey];
   if (cached && Date.now() - cached.ts < RANGE_CACHE_TTL) {
-    applyChartData(ch, cfg, cached.labels, cached.values, range);
+    applyChartData(ch, cfg, cached.labels, cached.values, cached.ohlcv, range);
     return;
   }
 
@@ -2606,16 +2762,18 @@ async function setChartRange(id, range) {
     const json = await res.json();
     if (!json.ok) throw new Error(json.error);
 
-    const history = json.data.history;
+    let history = json.data.history;
+    let ohlcv   = json.data.ohlcv || [];
+    if (range === '1h') { history = history.slice(-60); ohlcv = ohlcv.slice(-60); }
     const labels  = history.map(p => fmtLabel(p.time, range));
     const values  = history.map(p => p.value);
 
-    // 캐시 저장 (5분 TTL)
-    _rangeCache[cKey] = { labels, values, ts: Date.now() };
+    // 캐시 저장 (5분 TTL) — ohlcv 포함
+    _rangeCache[cKey] = { labels, values, ohlcv, ts: Date.now() };
 
     // 현재 선택 range가 바뀌지 않은 경우만 적용
     if (_chartRange[id] === range) {
-      applyChartData(ch, cfg, labels, values, range);
+      applyChartData(ch, cfg, labels, values, ohlcv, range);
     }
   } catch (e) {
     console.warn(`range fetch error [${id}][${range}]:`, e.message);
@@ -2630,8 +2788,13 @@ async function setChartRange(id, range) {
   }
 }
 
-// 이벤트 위임: 범위 버튼 클릭 (chartsGrid 내)
+// 이벤트 위임: 범위 버튼 + 차트 타입 버튼 (chartsGrid 내)
 document.getElementById('chartsGrid').addEventListener('click', e => {
+  // 차트 타입 버튼
+  const typeBtn = e.target.closest('.chart-type-btn');
+  if (typeBtn) { switchChartType(typeBtn.dataset.chartid); return; }
+
+  // 범위 버튼
   const btn = e.target.closest('.range-btn');
   if (!btn) return;
   const row = btn.closest('.range-row');
