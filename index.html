@@ -7,6 +7,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+  <!-- ── Supabase JS SDK (인증 + DB) ────────────────────── -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
   <style>
     /* ── Reset & Variables ─────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1013,9 +1015,173 @@
       animation: spin .7s linear infinite;
     }
     [data-theme="light"] .chart-loading { background: rgba(240,244,248,.6); }
+
+    /* ════ 헤더 버튼 / 로그인 영역 ════ */
+    .hdr-btn {
+      background: none; border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); cursor: pointer; font-size: .8rem; font-weight: 600;
+      padding: 7px 12px; font-family: inherit; white-space: nowrap;
+      transition: background .2s, border-color .2s, color .2s;
+    }
+    .hdr-btn:hover { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
+    .hdr-btn.primary {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+    .hdr-btn.primary:hover { background: #2563eb; border-color: #2563eb; color: #fff; }
+    #authArea { display: flex; align-items: center; gap: 10px; }
+    .user-chip { display: flex; align-items: center; gap: 8px; }
+    .user-email {
+      font-size: .76rem; color: var(--text); font-weight: 600;
+      max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .user-dot {
+      width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .72rem; font-weight: 700; color: #fff; text-transform: uppercase;
+    }
+
+    /* ════ 인증 모달 ════ */
+    .auth-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; width: min(92vw, 420px);
+      padding: 34px 32px 30px; position: relative;
+      animation: slideUp .22s cubic-bezier(.34,1.56,.64,1);
+    }
+    .auth-brand { text-align: center; margin-bottom: 22px; }
+    .auth-title { font-size: 1.2rem; font-weight: 700; letter-spacing: -.3px; }
+    .auth-sub   { font-size: .8rem; color: var(--muted); margin-top: 4px; }
+    .auth-tabs  { display: flex; gap: 8px; margin-bottom: 20px; }
+    .auth-tab {
+      flex: 1; padding: 10px; border-radius: 10px; cursor: pointer;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); font-weight: 600; font-family: inherit; font-size: .85rem;
+      transition: all .15s;
+    }
+    .auth-tab:hover:not(.active) { color: var(--text); border-color: #2a3d56; }
+    .auth-tab.active {
+      background: rgba(59,130,246,.12); color: var(--accent);
+      border-color: rgba(59,130,246,.35);
+    }
+    .auth-field { margin-bottom: 14px; }
+    .auth-label { display: block; font-size: .74rem; color: var(--muted); margin-bottom: 6px; }
+    .auth-input {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; color: var(--text); padding: 11px 14px;
+      font-size: .92rem; font-family: inherit; outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .auth-input::placeholder { color: var(--muted); }
+    .auth-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
+    .auth-submit {
+      width: 100%; background: var(--accent); color: #fff; border: none;
+      border-radius: 10px; padding: 12px; font-size: .95rem; font-weight: 600;
+      cursor: pointer; margin-top: 6px; font-family: inherit;
+      transition: background .2s, transform .15s;
+    }
+    .auth-submit:hover:not(:disabled) { background: #2563eb; transform: scale(1.01); }
+    .auth-submit:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+    .auth-msg { font-size: .8rem; margin-top: 12px; min-height: 1.1em; line-height: 1.4; }
+    .auth-msg.err { color: #f87171; }
+    .auth-msg.ok  { color: #22c55e; }
+    [data-theme="light"] .auth-box { background: #fff; }
+
+    /* 보유 종목 폼 모달 */
+    .holding-box { width: min(94vw, 480px); }
+    .hd-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px;
+    }
+    @media (max-width: 480px) { .hd-grid { grid-template-columns: 1fr; } }
+
+    /* ════ 포트폴리오 섹션 ════ */
+    .pf-section { margin-bottom: 12px; }
+    .pf-login-prompt {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; padding: 44px 24px; text-align: center;
+    }
+    .pf-login-prompt .pf-icon { font-size: 2.4rem; margin-bottom: 14px; }
+    .pf-login-prompt p { color: var(--muted); font-size: .9rem; margin-bottom: 18px; line-height: 1.5; }
+
+    .pf-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+    }
+    .pf-toolbar-info { font-size: .8rem; color: var(--muted); }
+    .pf-add-btn {
+      background: var(--accent); color: #fff; border: none; border-radius: 10px;
+      padding: 9px 16px; font-size: .85rem; font-weight: 600; cursor: pointer;
+      font-family: inherit; transition: background .2s, transform .15s;
+    }
+    .pf-add-btn:hover { background: #2563eb; transform: scale(1.02); }
+
+    .pf-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 18px; }
+    .pf-sum-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 18px 20px;
+    }
+    .pf-sum-cur   { font-size: .7rem; color: var(--muted); font-weight: 700; letter-spacing: .04em; margin-bottom: 8px; }
+    .pf-sum-row   { display: flex; align-items: baseline; justify-content: space-between; margin-top: 4px; }
+    .pf-sum-label { font-size: .74rem; color: var(--muted); }
+    .pf-sum-val   { font-size: .9rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .pf-sum-pl    { font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+    .pf-table-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; padding: 6px 8px; overflow-x: auto;
+    }
+    .pf-table { width: 100%; border-collapse: collapse; font-size: .85rem; min-width: 720px; }
+    .pf-table th {
+      text-align: right; padding: 13px 14px; color: var(--muted);
+      font-size: .68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .04em; border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    .pf-table th.l, .pf-table td.l { text-align: left; }
+    .pf-table td {
+      padding: 13px 14px; text-align: right; border-bottom: 1px solid var(--border);
+      font-variant-numeric: tabular-nums; white-space: nowrap;
+    }
+    .pf-table tbody tr:last-child td { border-bottom: none; }
+    .pf-table tbody tr { transition: background .15s; }
+    .pf-table tbody tr:hover { background: var(--surface2); }
+    .pf-ticker { font-weight: 700; }
+    .pf-row-name { color: var(--muted); font-size: .74rem; margin-top: 2px; }
+    .pf-flag {
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: .56rem; font-weight: 700; padding: 1px 5px; border-radius: 3px;
+      margin-right: 6px; vertical-align: middle;
+    }
+    .pf-act { display: inline-flex; gap: 6px; }
+    .pf-act-btn {
+      background: rgba(100,116,139,.08); border: 1px solid rgba(100,116,139,.2);
+      color: var(--muted); border-radius: 7px; padding: 4px 9px; font-size: .72rem;
+      cursor: pointer; font-family: inherit; transition: all .15s;
+    }
+    .pf-act-btn:hover { background: rgba(59,130,246,.15); color: var(--accent); border-color: rgba(59,130,246,.3); }
+    .pf-act-btn.del:hover { background: rgba(239,68,68,.15); color: #ef4444; border-color: rgba(239,68,68,.3); }
+    .pf-empty { padding: 40px 20px; text-align: center; color: var(--muted); font-size: .88rem; }
+    .pf-quote-err { font-size: .68rem; color: #f59e0b; }
+    @media (max-width: 768px) {
+      .pf-summary { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
+
+<!-- ════════════════════════════════════════════════════════════════════
+     ⚙️  SUPABASE 설정  ⚙️
+     ────────────────────────────────────────────────────────────────────
+     아래 두 값을 본인의 Supabase 프로젝트 값으로 채워주세요.
+       1) Supabase 대시보드 → Project Settings → API
+       2) "Project URL"  →  SUPABASE_URL
+          "anon public"  →  SUPABASE_ANON_KEY
+     값이 비어 있으면 포트폴리오/로그인 기능은 비활성화되고
+     나머지 대시보드는 정상 동작합니다.
+     (홀딩스 테이블 생성 SQL은 같은 폴더의 supabase_setup.sql 참고)
+═══════════════════════════════════════════════════════════════════════ -->
+<script>
+  const SUPABASE_URL      = 'https://lldwiebmgzxnqlxyssdy.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_g0aU-oJ2hTb-l8DBqkpQcA_qw7pD4iO';
+</script>
 
 <!-- ── Header ── -->
 <header>
@@ -1029,6 +1195,9 @@
       <div class="status-dot" id="statusDot"></div>
       <span id="statusText">데이터 수신 중...</span>
     </div>
+    <button class="hdr-btn" id="pfNavBtn" title="내 포트폴리오로 이동">📁 포트폴리오</button>
+    <!-- 로그인/유저 영역 (auth 상태에 따라 JS가 렌더) -->
+    <div id="authArea"></div>
     <button id="themeBtn" title="다크/라이트 모드" style="
   background:none; border:1px solid var(--border); border-radius:8px;
   color:var(--text); cursor:pointer; font-size:1rem;
@@ -1052,6 +1221,21 @@
   <!-- ── Charts ── -->
   <div class="section-title">지수 차트 <span style="color:var(--accent);font-weight:700" id="chartSubtitle">· 실시간 데이터 (15초 갱신)</span></div>
   <div class="charts-grid" id="chartsGrid"></div>
+
+  <!-- ── 내 포트폴리오 탭 ── -->
+  <div class="section-title" id="portfolioAnchor" style="margin-top:48px">
+    📁 내 포트폴리오
+    <span style="font-size:.68rem;color:var(--muted);font-weight:400;letter-spacing:0;text-transform:none;margin-left:10px">
+      보유 종목 · 실시간 시세 기반 수익률
+    </span>
+  </div>
+  <div class="pf-section" id="pfSection">
+    <!-- JS가 로그인 상태/보유 종목에 따라 렌더 -->
+    <div class="pf-login-prompt">
+      <div class="pf-icon">🔒</div>
+      <p>포트폴리오를 불러오는 중…</p>
+    </div>
+  </div>
 
   <!-- ── Ticker Search ── -->
   <div class="section-title" style="margin-top:48px">
@@ -1133,6 +1317,70 @@
   </div>
   <hr class="surge-divider" />
   <button class="surge-test-btn" id="surgeTestBtn">🧪 테스트 알림 보기</button>
+</div>
+
+<!-- ── 인증 모달 (로그인 / 회원가입) ── -->
+<div id="authModal" class="modal-overlay" style="display:none">
+  <div class="auth-box">
+    <button class="modal-close" id="authClose" title="닫기 (ESC)" style="position:absolute;top:18px;right:18px">✕</button>
+    <div class="auth-brand">
+      <div class="logo-icon" style="margin:0 auto 12px">📈</div>
+      <div class="auth-title">StockVision 계정</div>
+      <div class="auth-sub">포트폴리오를 저장하려면 로그인하세요</div>
+    </div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-mode="login">로그인</button>
+      <button class="auth-tab" data-mode="signup">회원가입</button>
+    </div>
+    <form id="authForm" autocomplete="on">
+      <div class="auth-field">
+        <label class="auth-label" for="authEmail">이메일</label>
+        <input type="email" id="authEmail" class="auth-input" placeholder="you@example.com" required autocomplete="email" />
+      </div>
+      <div class="auth-field">
+        <label class="auth-label" for="authPassword">비밀번호</label>
+        <input type="password" id="authPassword" class="auth-input" placeholder="6자 이상" required minlength="6" autocomplete="current-password" />
+      </div>
+      <button type="submit" class="auth-submit" id="authSubmit">로그인</button>
+      <div class="auth-msg" id="authMsg"></div>
+    </form>
+  </div>
+</div>
+
+<!-- ── 보유 종목 추가/수정 모달 ── -->
+<div id="holdingModal" class="modal-overlay" style="display:none">
+  <div class="auth-box holding-box">
+    <button class="modal-close" id="holdingClose" title="닫기 (ESC)" style="position:absolute;top:18px;right:18px">✕</button>
+    <div class="auth-title" id="holdingTitle" style="text-align:left;margin-bottom:4px">종목 추가</div>
+    <div class="auth-sub" style="text-align:left;margin-bottom:20px">티커·수량·평균매수가를 입력하세요</div>
+    <form id="holdingForm">
+      <input type="hidden" id="holdingId" />
+      <div class="hd-grid">
+        <div class="auth-field">
+          <label class="auth-label" for="hdTicker">티커 *</label>
+          <input type="text" id="hdTicker" class="auth-input" placeholder="AAPL · 005930.KS" required spellcheck="false" />
+        </div>
+        <div class="auth-field">
+          <label class="auth-label" for="hdName">종목명</label>
+          <input type="text" id="hdName" class="auth-input" placeholder="비워두면 자동 조회" />
+        </div>
+        <div class="auth-field">
+          <label class="auth-label" for="hdQty">수량 *</label>
+          <input type="number" id="hdQty" class="auth-input" placeholder="10" step="any" min="0" required />
+        </div>
+        <div class="auth-field">
+          <label class="auth-label" for="hdAvg">평균매수가 *</label>
+          <input type="number" id="hdAvg" class="auth-input" placeholder="65000" step="any" min="0" required />
+        </div>
+        <div class="auth-field" style="grid-column:1 / -1">
+          <label class="auth-label" for="hdDate">매수일</label>
+          <input type="date" id="hdDate" class="auth-input" />
+        </div>
+      </div>
+      <button type="submit" class="auth-submit" id="holdingSubmit">저장</button>
+      <div class="auth-msg" id="holdingMsg"></div>
+    </form>
+  </div>
 </div>
 
 <!-- ── Expand Modal ── -->
@@ -3089,6 +3337,543 @@ document.getElementById('searchResults').addEventListener('click', e => {
   const exp = e.target.closest('.search-expand-btn');
   if (exp) openSearchModal(exp.dataset.sym);
 });
+</script>
+
+<!-- ════════════════════════════════════════════════════════════════════
+     SUPABASE — 인증 + 보유 종목(holdings) 포트폴리오
+     (위 스크립트의 전역 헬퍼 fmt / fmtPct / pctChange / dirCls / dirHex /
+      hexToRgba / upCls / downCls / API_BASE 를 그대로 재사용)
+═══════════════════════════════════════════════════════════════════════ -->
+<script>
+/* ════════════════════════════════════════════════════════
+   CLIENT 초기화
+════════════════════════════════════════════════════════ */
+let supabaseClient = null;
+let currentUser    = null;
+
+(function initSupabase() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.warn('⚠️  Supabase 미설정 — index.html 상단의 SUPABASE_URL / SUPABASE_ANON_KEY 를 채워주세요.');
+    return;
+  }
+  if (!window.supabase || !window.supabase.createClient) {
+    console.error('Supabase SDK 로드 실패');
+    return;
+  }
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // 세션 복원 + 상태 변화 구독
+  supabaseClient.auth.getSession().then(({ data }) => {
+    currentUser = data?.session?.user ?? null;
+    renderAuthArea();
+    renderPortfolio();
+  });
+  supabaseClient.auth.onAuthStateChange((_event, session) => {
+    currentUser = session?.user ?? null;
+    renderAuthArea();
+    renderPortfolio();
+  });
+})();
+
+/* ════════════════════════════════════════════════════════
+   인증 (회원가입 / 로그인 / 로그아웃)
+════════════════════════════════════════════════════════ */
+async function signUp(email, password) {
+  const { data, error } = await supabaseClient.auth.signUp({ email, password });
+  if (error) throw error;
+  return data;
+}
+async function signIn(email, password) {
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data;
+}
+async function signOut() {
+  const { error } = await supabaseClient.auth.signOut();
+  if (error) throw error;
+}
+
+/* ════════════════════════════════════════════════════════
+   HOLDINGS CRUD  (RLS: user_id = auth.uid())
+════════════════════════════════════════════════════════ */
+async function fetchHoldings() {
+  if (!supabaseClient || !currentUser) return [];
+  const { data, error } = await supabaseClient
+    .from('holdings')
+    .select('*')
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+async function addHolding(h) {
+  if (!supabaseClient || !currentUser) throw new Error('로그인이 필요합니다');
+  const { data, error } = await supabaseClient
+    .from('holdings')
+    .insert({
+      user_id      : currentUser.id,
+      ticker       : h.ticker,
+      name         : h.name || null,
+      quantity     : h.quantity,
+      avg_price    : h.avg_price,
+      purchase_date: h.purchase_date || null,
+    })
+    .select();
+  if (error) throw error;
+  return data;
+}
+
+async function updateHolding(id, h) {
+  if (!supabaseClient || !currentUser) throw new Error('로그인이 필요합니다');
+  const { data, error } = await supabaseClient
+    .from('holdings')
+    .update({
+      ticker       : h.ticker,
+      name         : h.name || null,
+      quantity     : h.quantity,
+      avg_price    : h.avg_price,
+      purchase_date: h.purchase_date || null,
+    })
+    .eq('id', id)
+    .select();
+  if (error) throw error;
+  return data;
+}
+
+async function deleteHolding(id) {
+  if (!supabaseClient || !currentUser) throw new Error('로그인이 필요합니다');
+  const { error } = await supabaseClient.from('holdings').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/* ════════════════════════════════════════════════════════
+   실시간 시세 조회 (검색 API 재사용, 60초 캐시)
+════════════════════════════════════════════════════════ */
+const _pfQuoteCache = {};   // TICKER → { data, ts }
+async function pfFetchQuote(ticker) {
+  const key = (ticker || '').trim().toUpperCase();
+  if (!key) throw new Error('티커 없음');
+  const cached = _pfQuoteCache[key];
+  if (cached && Date.now() - cached.ts < 60_000) return cached.data;
+
+  const res  = await fetch(`${API_BASE}/api/search?sym=${encodeURIComponent(key)}`);
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || '시세 조회 실패');
+  _pfQuoteCache[key] = { data: json.data, ts: Date.now() };
+  return json.data;
+}
+
+/* 통화별 금액 포맷 */
+function pfFmtMoney(v, currency) {
+  if (v === null || v === undefined || isNaN(v)) return '---';
+  const isKRW = currency === 'KRW';
+  const sym   = isKRW ? '₩' : (currency === 'USD' ? '$' : '');
+  const dec   = isKRW ? 0 : 2;
+  return sym + v.toLocaleString('ko-KR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+
+/* ════════════════════════════════════════════════════════
+   헤더 로그인/유저 영역 렌더
+════════════════════════════════════════════════════════ */
+function renderAuthArea() {
+  const area = document.getElementById('authArea');
+  if (!area) return;
+
+  if (!supabaseClient) {
+    area.innerHTML = `<button class="hdr-btn" id="loginBtn" title="Supabase 미설정">🔑 로그인</button>`;
+    document.getElementById('loginBtn').onclick = openAuthModal;
+    return;
+  }
+
+  if (currentUser) {
+    const email   = currentUser.email || '사용자';
+    const initial = email.charAt(0);
+    area.innerHTML = `
+      <div class="user-chip">
+        <div class="user-dot">${initial}</div>
+        <span class="user-email" title="${email}">${email}</span>
+        <button class="hdr-btn" id="logoutBtn">로그아웃</button>
+      </div>`;
+    document.getElementById('logoutBtn').onclick = async () => {
+      try { await signOut(); } catch (e) { console.error(e); }
+    };
+  } else {
+    area.innerHTML = `<button class="hdr-btn primary" id="loginBtn">🔑 로그인</button>`;
+    document.getElementById('loginBtn').onclick = openAuthModal;
+  }
+}
+
+/* ════════════════════════════════════════════════════════
+   인증 모달 제어
+════════════════════════════════════════════════════════ */
+let _authMode = 'login';   // 'login' | 'signup'
+
+function openAuthModal() {
+  setAuthMode('login');
+  document.getElementById('authMsg').textContent = '';
+  document.getElementById('authModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => document.getElementById('authEmail').focus(), 50);
+}
+function closeAuthModal() {
+  document.getElementById('authModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+function setAuthMode(mode) {
+  _authMode = mode;
+  document.querySelectorAll('.auth-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.mode === mode));
+  document.getElementById('authSubmit').textContent =
+    mode === 'login' ? '로그인' : '회원가입';
+  document.getElementById('authPassword').setAttribute(
+    'autocomplete', mode === 'login' ? 'current-password' : 'new-password');
+  document.getElementById('authMsg').textContent = '';
+}
+
+document.querySelectorAll('.auth-tab').forEach(tab => {
+  tab.addEventListener('click', () => setAuthMode(tab.dataset.mode));
+});
+document.getElementById('authClose').addEventListener('click', closeAuthModal);
+document.getElementById('authModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('authModal')) closeAuthModal();
+});
+
+document.getElementById('authForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const email = document.getElementById('authEmail').value.trim();
+  const pw    = document.getElementById('authPassword').value;
+  const msg   = document.getElementById('authMsg');
+  const btn   = document.getElementById('authSubmit');
+
+  if (!supabaseClient) {
+    msg.className = 'auth-msg err';
+    msg.textContent = 'Supabase가 설정되지 않았습니다. index.html 상단의 URL/Key를 입력하세요.';
+    return;
+  }
+
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = '처리 중…';
+  msg.className = 'auth-msg';
+  msg.textContent = '';
+
+  try {
+    if (_authMode === 'signup') {
+      const data = await signUp(email, pw);
+      if (data.session) {
+        msg.className = 'auth-msg ok';
+        msg.textContent = '✅ 가입 완료! 자동 로그인되었습니다.';
+        setTimeout(closeAuthModal, 900);
+      } else {
+        msg.className = 'auth-msg ok';
+        msg.textContent = '✅ 가입 완료! 이메일 인증이 필요할 수 있습니다. 메일함을 확인하세요.';
+      }
+    } else {
+      await signIn(email, pw);
+      msg.className = 'auth-msg ok';
+      msg.textContent = '✅ 로그인되었습니다.';
+      setTimeout(closeAuthModal, 600);
+    }
+  } catch (err) {
+    msg.className = 'auth-msg err';
+    msg.textContent = '❌ ' + (err.message || '오류가 발생했습니다');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+});
+
+/* ════════════════════════════════════════════════════════
+   포트폴리오 렌더
+════════════════════════════════════════════════════════ */
+async function renderPortfolio() {
+  const sec = document.getElementById('pfSection');
+  if (!sec) return;
+
+  // ── 미설정 안내 ──
+  if (!supabaseClient) {
+    sec.innerHTML = `
+      <div class="pf-login-prompt">
+        <div class="pf-icon">⚙️</div>
+        <p>Supabase가 아직 설정되지 않았습니다.<br>
+           <strong>index.html 최상단</strong>의 <code>SUPABASE_URL</code> / <code>SUPABASE_ANON_KEY</code> 를 입력하면<br>
+           로그인과 포트폴리오 기능이 활성화됩니다.<br>
+           (테이블 생성은 <code>supabase_setup.sql</code> 참고)</p>
+      </div>`;
+    return;
+  }
+
+  // ── 로그인 유도 ──
+  if (!currentUser) {
+    sec.innerHTML = `
+      <div class="pf-login-prompt">
+        <div class="pf-icon">🔒</div>
+        <p>로그인하면 보유 종목을 저장하고<br>실시간 시세 기준 수익률을 확인할 수 있습니다.</p>
+        <button class="pf-add-btn" id="pfLoginBtn">🔑 로그인 / 회원가입</button>
+      </div>`;
+    document.getElementById('pfLoginBtn').onclick = openAuthModal;
+    return;
+  }
+
+  // ── 로딩 ──
+  sec.innerHTML = `
+    <div class="pf-toolbar">
+      <span class="pf-toolbar-info">보유 종목을 불러오는 중…</span>
+      <button class="pf-add-btn" id="pfAddBtn">+ 종목 추가</button>
+    </div>
+    <div class="pf-table-wrap"><div class="pf-empty">⏳ 로딩 중…</div></div>`;
+  document.getElementById('pfAddBtn').onclick = () => openHoldingModal();
+
+  let holdings;
+  try {
+    holdings = await fetchHoldings();
+  } catch (e) {
+    sec.querySelector('.pf-table-wrap').innerHTML =
+      `<div class="pf-empty" style="color:#f87171">❌ 보유 종목을 불러오지 못했습니다: ${e.message}</div>`;
+    return;
+  }
+
+  if (!holdings.length) {
+    renderPortfolioShell([], {});
+    return;
+  }
+
+  // ── 시세 병렬 조회 ──
+  const tickers = [...new Set(holdings.map(h => h.ticker.toUpperCase()))];
+  const quoteMap = {};
+  await Promise.all(tickers.map(async t => {
+    try { quoteMap[t] = await pfFetchQuote(t); }
+    catch (e) { quoteMap[t] = { _error: e.message }; }
+  }));
+
+  renderPortfolioShell(holdings, quoteMap);
+}
+
+function renderPortfolioShell(holdings, quoteMap) {
+  const sec = document.getElementById('pfSection');
+
+  // ── 통화별 합계 ──
+  const totals = {};   // currency → { invested, current }
+  holdings.forEach(h => {
+    const q = quoteMap[h.ticker.toUpperCase()];
+    if (!q || q._error) return;
+    const cur = q.currency || (q.isKR ? 'KRW' : 'USD');
+    const t   = (totals[cur] ||= { invested: 0, current: 0 });
+    t.invested += Number(h.avg_price) * Number(h.quantity);
+    t.current  += Number(q.current)   * Number(h.quantity);
+  });
+
+  const summaryHtml = Object.keys(totals).length ? `
+    <div class="pf-summary">
+      ${Object.entries(totals).map(([cur, t]) => {
+        const pl     = t.current - t.invested;
+        const plPct  = t.invested ? (pl / t.invested) * 100 : 0;
+        const market = cur === 'KRW' ? 'kr' : 'us';
+        const dc     = dirCls(pl >= 0, market);
+        return `
+          <div class="pf-sum-card">
+            <div class="pf-sum-cur">${cur} 합계</div>
+            <div class="pf-sum-pl ${dc}">${(pl>=0?'+':'')}${pfFmtMoney(pl, cur)}
+              <span style="font-size:.85rem">(${fmtPct(plPct)})</span>
+            </div>
+            <div class="pf-sum-row"><span class="pf-sum-label">매수금액</span><span class="pf-sum-val">${pfFmtMoney(t.invested, cur)}</span></div>
+            <div class="pf-sum-row"><span class="pf-sum-label">평가금액</span><span class="pf-sum-val">${pfFmtMoney(t.current, cur)}</span></div>
+          </div>`;
+      }).join('')}
+    </div>` : '';
+
+  // ── 종목 행 ──
+  const rowsHtml = holdings.map(h => {
+    const q   = quoteMap[h.ticker.toUpperCase()];
+    const qty = Number(h.quantity);
+    const avg = Number(h.avg_price);
+
+    if (!q || q._error) {
+      return `
+        <tr>
+          <td class="l">
+            <div class="pf-ticker">${h.ticker}</div>
+            <div class="pf-row-name">${h.name || ''}</div>
+          </td>
+          <td>${fmt(qty, qty % 1 ? 4 : 0)}</td>
+          <td>${avg.toLocaleString('ko-KR')}</td>
+          <td colspan="3" class="pf-quote-err">⚠️ 시세 조회 실패</td>
+          <td>${renderActCell(h)}</td>
+        </tr>`;
+    }
+
+    const cur     = q.currency || (q.isKR ? 'KRW' : 'USD');
+    const market  = q.isKR ? 'kr' : 'us';
+    const dec     = q.decimals ?? (q.isKR ? 0 : 2);
+    const price   = Number(q.current);
+    const invested = avg * qty;
+    const value    = price * qty;
+    const pl       = value - invested;
+    const plPct    = avg ? ((price - avg) / avg) * 100 : 0;
+    const dc       = dirCls(pl >= 0, market);
+    const flagCls  = q.isKR ? 'flag-kr' : 'flag-us';
+    const flagTxt  = q.isKR ? 'KR' : 'US';
+
+    return `
+      <tr>
+        <td class="l">
+          <div class="pf-ticker"><span class="pf-flag ${flagCls}">${flagTxt}</span>${h.ticker}</div>
+          <div class="pf-row-name">${h.name || q.name || ''}${h.purchase_date ? ' · ' + h.purchase_date : ''}</div>
+        </td>
+        <td>${fmt(qty, qty % 1 ? 4 : 0)}</td>
+        <td>${pfFmtMoney(avg, cur)}</td>
+        <td>${pfFmtMoney(price, cur)}</td>
+        <td class="${dc}">${(pl>=0?'+':'')}${pfFmtMoney(pl, cur)}</td>
+        <td class="${dc}" style="font-weight:700">${fmtPct(plPct)}</td>
+        <td>${renderActCell(h)}</td>
+      </tr>`;
+  }).join('');
+
+  sec.innerHTML = `
+    <div class="pf-toolbar">
+      <span class="pf-toolbar-info">총 ${holdings.length}개 종목 · 시세 60초 캐시</span>
+      <button class="pf-add-btn" id="pfAddBtn">+ 종목 추가</button>
+    </div>
+    ${summaryHtml}
+    <div class="pf-table-wrap">
+      ${holdings.length ? `
+      <table class="pf-table">
+        <thead>
+          <tr>
+            <th class="l">종목</th>
+            <th>수량</th>
+            <th>평균매수가</th>
+            <th>현재가</th>
+            <th>평가손익</th>
+            <th>수익률</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>` : `<div class="pf-empty">아직 보유 종목이 없습니다. <strong>+ 종목 추가</strong>로 시작하세요.</div>`}
+    </div>`;
+
+  document.getElementById('pfAddBtn').onclick = () => openHoldingModal();
+
+  // 행 액션 위임
+  sec.querySelectorAll('.pf-act-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const h  = holdings.find(x => String(x.id) === String(id));
+      if (btn.classList.contains('del')) pfDelete(h);
+      else openHoldingModal(h);
+    });
+  });
+}
+
+function renderActCell(h) {
+  return `
+    <span class="pf-act">
+      <button class="pf-act-btn" data-id="${h.id}" title="수정">수정</button>
+      <button class="pf-act-btn del" data-id="${h.id}" title="삭제">삭제</button>
+    </span>`;
+}
+
+async function pfDelete(h) {
+  if (!h) return;
+  if (!confirm(`'${h.ticker}' 보유 종목을 삭제할까요?`)) return;
+  try {
+    await deleteHolding(h.id);
+    renderPortfolio();
+  } catch (e) {
+    alert('삭제 실패: ' + e.message);
+  }
+}
+
+/* ════════════════════════════════════════════════════════
+   보유 종목 추가/수정 모달
+════════════════════════════════════════════════════════ */
+function openHoldingModal(h) {
+  const editing = !!h;
+  document.getElementById('holdingTitle').textContent = editing ? '종목 수정' : '종목 추가';
+  document.getElementById('holdingId').value    = editing ? h.id : '';
+  document.getElementById('hdTicker').value     = editing ? h.ticker : '';
+  document.getElementById('hdName').value       = editing ? (h.name || '') : '';
+  document.getElementById('hdQty').value        = editing ? h.quantity : '';
+  document.getElementById('hdAvg').value        = editing ? h.avg_price : '';
+  document.getElementById('hdDate').value       = editing && h.purchase_date ? h.purchase_date : '';
+  document.getElementById('holdingMsg').textContent = '';
+  document.getElementById('holdingModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => document.getElementById('hdTicker').focus(), 50);
+}
+function closeHoldingModal() {
+  document.getElementById('holdingModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+document.getElementById('holdingClose').addEventListener('click', closeHoldingModal);
+document.getElementById('holdingModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('holdingModal')) closeHoldingModal();
+});
+
+document.getElementById('holdingForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = document.getElementById('holdingMsg');
+  const btn = document.getElementById('holdingSubmit');
+  const id  = document.getElementById('holdingId').value;
+
+  const ticker = document.getElementById('hdTicker').value.trim().toUpperCase();
+  let   name   = document.getElementById('hdName').value.trim();
+  const qty    = parseFloat(document.getElementById('hdQty').value);
+  const avg    = parseFloat(document.getElementById('hdAvg').value);
+  const date   = document.getElementById('hdDate').value || null;
+
+  if (!ticker || isNaN(qty) || isNaN(avg)) {
+    msg.className = 'auth-msg err';
+    msg.textContent = '티커·수량·평균매수가를 올바르게 입력하세요.';
+    return;
+  }
+
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = '저장 중…';
+  msg.className = 'auth-msg';
+  msg.textContent = '';
+
+  try {
+    // 종목명 비어 있으면 자동 조회 (실패해도 무시)
+    if (!name) {
+      try { const q = await pfFetchQuote(ticker); name = q.name || ''; } catch (_) {}
+    }
+    const payload = { ticker, name, quantity: qty, avg_price: avg, purchase_date: date };
+    if (id) await updateHolding(id, payload);
+    else    await addHolding(payload);
+
+    closeHoldingModal();
+    renderPortfolio();
+  } catch (err) {
+    msg.className = 'auth-msg err';
+    msg.textContent = '❌ ' + (err.message || '저장 실패');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+});
+
+/* ════════════════════════════════════════════════════════
+   기타 바인딩
+════════════════════════════════════════════════════════ */
+// 헤더 "포트폴리오" 버튼 → 섹션으로 스크롤
+document.getElementById('pfNavBtn').addEventListener('click', () => {
+  document.getElementById('portfolioAnchor')
+    .scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+// ESC 로 인증/보유 모달 닫기
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (document.getElementById('authModal').style.display === 'flex')    closeAuthModal();
+  if (document.getElementById('holdingModal').style.display === 'flex') closeHoldingModal();
+});
+
+// 초기 렌더 (미설정/로그아웃 상태 즉시 표시)
+renderAuthArea();
+renderPortfolio();
 </script>
 </body>
 </html>
